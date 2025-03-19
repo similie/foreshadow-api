@@ -1,0 +1,10 @@
+.DS_Store
+.venv
+tiles
+cached_data
+*.tif
+output.*
+output_tiles
+grib
+__pycache__
+.ropeproject
