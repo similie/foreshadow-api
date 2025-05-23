@@ -30,7 +30,7 @@ from pydantic import BaseModel
 
 
 # Import your project modules (adjust paths as needed)
-from gfs_render import ModelService, RedisCacheBackend, TileRendering, SystemConfig, LayerCacheService, NumGridCacheService, LayerSliceCaching
+from gfs_render import ModelService, RedisCacheBackend, TileRendering, SystemConfig
 # from gfs_render.time_logger import TimeLogger
 
 
@@ -43,12 +43,8 @@ backend_cache = RedisCacheBackend()
 # Set preload_layers=True if you want to prewarm interpolators on startup.
 model_service = ModelService(backend_cache)
 tile_renderer = TileRendering(model_service)
-cfg = SystemConfig().get_default_forecast_json()
-# layer_cache = LayerCacheService(model_service, model = cfg["model"], param_keys = cfg["param_keys"] )
+
 app = FastAPI(title="Global Norm Map Server", version="1.0")
-
-
-layer_slice = LayerSliceCaching(model_service, backend_cache)
 # (Optional) Add CORS middleware if needed.
 app.add_middleware(
     CORSMiddleware,
@@ -253,19 +249,10 @@ def predefined_forecast(lat: float, lon: float , hour_offset: int = 0):
     if lat is None or lon is None:
         return HTTPException(status_code=400, detail="Missing required fields: lat, lon.")
 
-    results = layer_slice.get_slices(lat, lon, hour_offset)
-    return JSONResponse(content=results)
-
     total_days = int(math.floor(round(((24 * total_days) - hour_offset) / 24)))
     config = SystemConfig()
     jsonData = config.get_default_forecast_json()
-
-
-    # gs = NumGridCacheService()
-    # print("working it", jsonData)
-    # results = gs.get_point_forecast(lat, lon, hour_offset)
-    # print("MY RESULT", results)
-    # return JSONResponse(content=results)
+    print("working it", jsonData)
     timeseries = model_service.get_point_forecast_timeseries(
         model=jsonData["model"],
         param_keys=jsonData["param_keys"],
@@ -275,7 +262,7 @@ def predefined_forecast(lat: float, lon: float , hour_offset: int = 0):
         total_days=total_days,
         step_hours=jsonData["step_hours"],
     )
-    print("GOT THIS", timeseries)
+    print("GOT THIS BITCH", timeseries)
     if not timeseries:
         return JSONResponse(content=[], status_code=200)
     return JSONResponse(content=timeseries)
@@ -331,8 +318,45 @@ async def forecast_route(request: Request):
 #———————————————————————————————
 # 1) the “pre-warm” worker
 #———————————————————————————————
-#
-
+async def _prewarm_loop(
+    models: Sequence[str],
+    param_keys:Union[str, List[Union[str, Dict[str, Any]]]],
+    interval_s: float = 60.0,
+    total_days: int = 5,
+    step_hours: int = 3,
+    start_hour_offset: int = 0,
+):
+    loop = asyncio.get_event_loop()
+    while True:
+        # pick random lat/lon in valid ranges
+        lat = random.uniform(-90.0, 90.0)
+        lon = random.uniform(-180.0, 180.0)
+        model = random.choice(models)
+        print("Warming my shit", lat, lon, model)
+        try:
+            # run the blocking call off the event loop
+            timeseries = await loop.run_in_executor(
+                None,
+                lambda: model_service.get_point_forecast_timeseries(
+                    model=model,
+                    param_keys=param_keys,
+                    lat=lat,
+                    lon=lon,
+                    start_hour_offset=start_hour_offset,
+                    total_days=total_days,
+                    step_hours=step_hours,
+                )
+            )
+            print(timeseries)
+            # if timeseries:
+            #     # serialize and stash in Redis (adjust key‐format however you like)
+            #     cache_key = f"prewarm:{model}:{lat:.4f},{lon:.4f}:{start_hour_offset}:{total_days}d:{step_hours}h"
+            #     backend_cache.set(cache_key, json.dumps(timeseries), expire=3600)
+            #     logger.info(f"Pre-warmed cache key={cache_key}")
+        except Exception as exc:
+            logger.error(f"Pre-warm failed for {model}@{lat},{lon}: {exc}")
+        # wait before next one
+        await asyncio.sleep(interval_s)
 
 #———————————————————————————————
 # 2) start it on app startup
@@ -341,15 +365,12 @@ async def forecast_route(request: Request):
 async def kick_off_prewarm():
         # decide which models & param_keys to pre-warm:
         # you could read SystemConfig, or hard-code a list, e.g.:
-    # cfg = SystemConfig().get_default_forecast_json()
-    # models = [cfg["model"]]
-    # param_keys = cfg["param_keys"]
+    cfg = SystemConfig().get_default_forecast_json()
+    models = [cfg["model"]]
+    param_keys = cfg["param_keys"]
     # launch the infinite prewarm task
-    print("GETTING STARTING WITH THIS BOOMO Strategy")
-    layer_slice.refresh()
-    # layer_cache.start_refresh_scheduler()
-
-    # asyncio.create_task(_prewarm_loop(models, param_keys, interval_s=600.0))
+    print("GETTING STARTING WITH THIS")
+    asyncio.create_task(_prewarm_loop(models, param_keys, interval_s=600.0))
 ###############################################################################
 # Main entry point
 ###############################################################################
