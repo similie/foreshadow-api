@@ -275,7 +275,7 @@ def predefined_forecast(lat: float, lon: float , hour_offset: int = 0):
         total_days=total_days,
         step_hours=jsonData["step_hours"],
     )
-    print("GOT THIS BITCH", timeseries)
+    print("GOT THIS", timeseries)
     if not timeseries:
         return JSONResponse(content=[], status_code=200)
     return JSONResponse(content=timeseries)
@@ -345,7 +345,7 @@ async def kick_off_prewarm():
     # models = [cfg["model"]]
     # param_keys = cfg["param_keys"]
     # launch the infinite prewarm task
-    print("GETTING STARTING WITH THIS BOOMO ASS SHIT")
+    print("GETTING STARTING WITH THIS BOOMO Strategy")
     layer_slice.refresh()
     # layer_cache.start_refresh_scheduler()
 
