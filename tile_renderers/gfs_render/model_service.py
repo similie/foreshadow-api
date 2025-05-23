@@ -394,9 +394,11 @@ class ModelService:
         if step_type is not None:
             search["stepType"] = step_type
 
+        print("I am this search here", search)
         # if level is not None and type_of_level is not None:
         try:
             sel = grbs.select(**search)
+            print('I KEY GOT FOUND OUT', sel)
             if len(sel) == 1:
                 logger.debug(f"[Exact match] param={param_name}, level={level}, typeOfLevel={type_of_level}")
                 return sel[0]
@@ -619,7 +621,7 @@ class ModelService:
                     continue
 
                 pk = self.make_param_key(nm)
-                color_map = self.colors.get_color_profile(model_key, nm)
+                color_map = self.colors.get_color_profile(model_key, nm, 256, 20)
                 p_info = {
                     "parameter_key": pk,
                     "parameter_name": nm,
@@ -947,6 +949,7 @@ class ModelService:
         step_type: Optional[str] = None
     ):
         cache_key = self._get_grib_array_values_key(param_name, model, hour_offset, level, type_of_level, step_type)
+        print("I AM A CHACHED KEY FOR THIS", cache_key)
         def compute():
             try:
                 g = self._select_grib_message(grbs, param_name , level, type_of_level, step_type)

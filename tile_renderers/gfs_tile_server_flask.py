@@ -23,12 +23,13 @@ Routes:
 
 import io
 import logging
+import math
 from flask import Flask, send_file, abort, jsonify, request
 from flask_caching import Cache
 
 # optional parameter metadata merges
 
-from gfs_render import TileRendering, ModelService, RedisCacheBackend
+from gfs_render import TileRendering, ModelService, RedisCacheBackend,SystemConfig
 ##############################################################################
 # Flask Setup
 ##############################################################################
@@ -84,7 +85,6 @@ def serve_tile_route(model, param_key, hour_offset, z, x, y):
         return abort(404, "Invalid tile coords.")
 
     cache_key = model_service.create_tile_cache_key(model, param_key, user_tof, hour_offset, z, x, y, level_arg, step_type)
-    print('MY CACHE KEY', cache_key)
     try:
         cached_tile = backend_cache.get(cache_key)
         if cached_tile:
@@ -201,6 +201,37 @@ def point_forecast_route(model, param_key, hour_offset):
         return abort(404, "No forecast value found at this point.")
     else:
         return jsonify(val)
+
+@app.route("/forecast", methods=["GET"])
+def predefined_forecast():
+    return jsonify({"boomo":"gazzomo"})
+    lat = request.args.get("lat", type=float, default=None)
+    lon = request.args.get("lon", type=float, default=None)
+    hour_offset = request.args.get("start_hour_offset", type=int, default=0)
+    total_days = 5
+    max_hours = 24 * (total_days - 1 )
+    if hour_offset > max_hours:
+        return abort(400, "Invalid hour offset. It cannot exceed four days")
+
+    if lat is None or lon is None:
+        return abort(400, "Missing required fields: lat, lon.")
+
+    total_days = int(math.floor(((24 * total_days) - hour_offset) / 24))
+    config = SystemConfig()
+    timeseries = model_service.get_point_forecast_timeseries(
+        model=config["model"],
+        param_keys=config["param_keys"],
+        lat=lat,
+        lon=lon,
+        start_hour_offset=hour_offset,
+        total_days=total_days,
+        step_hours=config["step_hours"],
+    )
+    # If we got no results at all, you can decide to 404 or return []
+    if not timeseries:
+        return jsonify([]), 200
+    return jsonify(timeseries), 200
+
 
 @app.route("/forecast", methods=["POST"])
 def forecast_route():

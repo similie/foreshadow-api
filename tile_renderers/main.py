@@ -17,18 +17,20 @@ Run with multiple worker processes (via Uvicorn) to help with CPU‐bound work.
 """
 import json
 import os
+import math
 import io
 import logging
-from typing import  List, Optional, Union
+from typing import  List, Optional, Union, Dict, Any, Sequence
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
-import asyncio
+import asyncio, random
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+
 # Import your project modules (adjust paths as needed)
-from gfs_render import ModelService, RedisCacheBackend, TileRendering
+from gfs_render import ModelService, RedisCacheBackend, TileRendering, SystemConfig, LayerCacheService, NumGridCacheService, LayerSliceCaching
 # from gfs_render.time_logger import TimeLogger
 
 
@@ -41,8 +43,12 @@ backend_cache = RedisCacheBackend()
 # Set preload_layers=True if you want to prewarm interpolators on startup.
 model_service = ModelService(backend_cache)
 tile_renderer = TileRendering(model_service)
-
+cfg = SystemConfig().get_default_forecast_json()
+# layer_cache = LayerCacheService(model_service, model = cfg["model"], param_keys = cfg["param_keys"] )
 app = FastAPI(title="Global Norm Map Server", version="1.0")
+
+
+layer_slice = LayerSliceCaching(model_service, backend_cache)
 # (Optional) Add CORS middleware if needed.
 app.add_middleware(
     CORSMiddleware,
@@ -237,6 +243,44 @@ async def forecast_streaming_route(request: Request):
 
     return StreamingResponse(stream_forecast(), media_type="text/event-stream")
 
+@app.get("/forecast")
+def predefined_forecast(lat: float, lon: float , hour_offset: int = 0):
+    total_days = 5
+    max_hours = 24 * (total_days - 1 )
+    if hour_offset > max_hours:
+        return HTTPException(status_code=400, detail="Invalid hour offset. It cannot exceed four days")
+
+    if lat is None or lon is None:
+        return HTTPException(status_code=400, detail="Missing required fields: lat, lon.")
+
+    results = layer_slice.get_slices(lat, lon, hour_offset)
+    return JSONResponse(content=results)
+
+    total_days = int(math.floor(round(((24 * total_days) - hour_offset) / 24)))
+    config = SystemConfig()
+    jsonData = config.get_default_forecast_json()
+
+
+    # gs = NumGridCacheService()
+    # print("working it", jsonData)
+    # results = gs.get_point_forecast(lat, lon, hour_offset)
+    # print("MY RESULT", results)
+    # return JSONResponse(content=results)
+    timeseries = model_service.get_point_forecast_timeseries(
+        model=jsonData["model"],
+        param_keys=jsonData["param_keys"],
+        lat=lat,
+        lon=lon,
+        start_hour_offset=hour_offset,
+        total_days=total_days,
+        step_hours=jsonData["step_hours"],
+    )
+    print("GOT THIS BITCH", timeseries)
+    if not timeseries:
+        return JSONResponse(content=[], status_code=200)
+    return JSONResponse(content=timeseries)
+    return JSONResponse(content=jsonData)
+
 @app.post("/forecast")
 async def forecast_route(request: Request):
     """
@@ -284,10 +328,31 @@ async def forecast_route(request: Request):
     if not timeseries:
         return JSONResponse(content=[], status_code=200)
     return JSONResponse(content=timeseries)
+#———————————————————————————————
+# 1) the “pre-warm” worker
+#———————————————————————————————
+#
 
+
+#———————————————————————————————
+# 2) start it on app startup
+#———————————————————————————————
+@app.on_event("startup")
+async def kick_off_prewarm():
+        # decide which models & param_keys to pre-warm:
+        # you could read SystemConfig, or hard-code a list, e.g.:
+    # cfg = SystemConfig().get_default_forecast_json()
+    # models = [cfg["model"]]
+    # param_keys = cfg["param_keys"]
+    # launch the infinite prewarm task
+    print("GETTING STARTING WITH THIS BOOMO ASS SHIT")
+    layer_slice.refresh()
+    # layer_cache.start_refresh_scheduler()
+
+    # asyncio.create_task(_prewarm_loop(models, param_keys, interval_s=600.0))
 ###############################################################################
 # Main entry point
 ###############################################################################
 if __name__ == "__main__":
     # Run with multiple worker processes to distribute CPU-bound tasks.
-    uvicorn.run("main:app", host="0.0.0.0", port=5001, reload=False, workers=os.cpu_count() or 4)
+    uvicorn.run("main:app", host="0.0.0.0", port=5001, reload=True, workers=os.cpu_count() or 4)

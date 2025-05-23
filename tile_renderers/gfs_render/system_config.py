@@ -1,7 +1,97 @@
+from sysconfig import get_default_scheme
 import numpy as np
 from typing import Dict
 import os
+import json
 class SystemConfig:
+    def get_default_forecast_json(self):
+        data = '''{
+            "model": "gfs",
+            "param_keys": [{
+                "param_key": "pressure-reduced-to-msl",
+                "level": 0,
+                "typeOfLevel": "meanSea",
+                "stepType": "instant"
+            }, {
+                "param_key": "surface-pressure",
+                "typeOfLevel": "surface",
+                "level": 0,
+                "stepType": "instant"
+            }, {
+                "param_key": "wind-speed-gust",
+                "typeOfLevel": "surface",
+                "level": 0,
+                "stepType": "instant"
+            }, {
+                "param_key": "10-metre-u-wind-component",
+                "typeOfLevel": "heightAboveGround",
+                "level": 10,
+                "stepType": "instant"
+            }, {
+                "param_key": "10-metre-v-wind-component",
+                "typeOfLevel": "heightAboveGround",
+                "level": 10,
+                "stepType": "instant"
+            }, {
+                "param_key": "apparent-temperature",
+                "typeOfLevel": "heightAboveGround",
+                "level": 2,
+                "stepType": "instant"
+            }, {
+                "param_key": "2-metre-temperature",
+                "typeOfLevel": "heightAboveGround",
+                "level": 2,
+                "stepType": "instant"
+            }, {
+                "param_key": "2-metre-dewpoint-temperature",
+                "typeOfLevel": "heightAboveGround",
+                "level": 2,
+                "stepType": "instant"
+            }, {
+                "param_key": "2-metre-relative-humidity",
+                "typeOfLevel": "heightAboveGround",
+                "level": 2,
+                "stepType": "instant"
+            }, {
+                "param_key": "2-metre-specific-humidity",
+                "typeOfLevel": "heightAboveGround",
+                "level": 2,
+                "stepType": "instant"
+            }, {
+                "param_key": "precipitation-rate",
+                "typeOfLevel": "surface",
+                "level": 0,
+                "stepType": "instant"
+            }, {
+                "param_key": "total-precipitation",
+                "typeOfLevel": "surface",
+                "level": 0,
+                "stepType": "accum"
+            }],
+            "lat": 0,
+            "lon": 0,
+            "start_hour_offset": 0,
+            "total_days": 5,
+            "step_hours": 3
+        }'''
+
+        # data = '''{
+        #     "model": "gfs",
+        #     "param_keys": [{
+        #         "param_key": "pressure-reduced-to-msl",
+        #         "level": 0,
+        #         "typeOfLevel": "meanSea",
+        #         "stepType": "instant"
+        #     }],
+        #     "lat": 0,
+        #     "lon": 0,
+        #     "start_hour_offset": 0,
+        #     "total_days": 5,
+        #     "step_hours": 3
+        # }'''
+
+        return json.loads(data)
+
     def __init__(self):
         self.WEB_MERCATOR_CONSTANT = 20037508.342789244
         self.TILE_SIZE = 256
