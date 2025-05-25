@@ -249,7 +249,7 @@ async def forecast_streaming_route(request: Request):
 def forecast(lat: float, lon: float, hour_offset: int = 0):
     try:
 
-        if layer_cache.isLoading():
+        if layer_cache.is_loading():
             raise HTTPException(status_code=404, detail="Data is not ready for output.")
 
         result = layer_cache.get_slices(lat, lon, hour_offset)
