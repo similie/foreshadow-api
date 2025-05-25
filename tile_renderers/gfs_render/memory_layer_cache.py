@@ -90,7 +90,7 @@ class MemoryLayerCache:
                 print(f"[Preload] Building interpolator for {key} {available}")
                 if available:
                     continue
-                ip = self.model_service.get_or_build_interpolator(
+                ip = self.model_service.generate_interpolator(
                     self.model, pk, off, lvl, tof, stp
                 )
                 if not ip:
