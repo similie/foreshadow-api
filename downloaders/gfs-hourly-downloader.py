@@ -32,7 +32,7 @@ FILE_NAME_PATTERNS = [
 ]
 
 #LOCAL_BASE_PATH = "/Volumes/ModelBackup/HyphenForecaster/gfs_slim"
-LOCAL_BASE_PATH = os.getenv("GRIB_FILES_PATH", "/Users/guernica0131/Sites/foreshadow-api/grib")
+LOCAL_BASE_PATH = os.getenv("GRIB_FILES_PATH", "/home/guernica0131/Sites/foreshadow-api/grib")
 MAX_DAYS = 5
 
 # These will be used *per hour* depending on whether it's 00 or not:
