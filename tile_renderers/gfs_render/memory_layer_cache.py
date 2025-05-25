@@ -47,7 +47,7 @@ class MemoryLayerCache:
     def isLoading(self):
        return self._loading and self._init_run
 
-    def loadOffset(self):
+    def preload(self):
 
         if self._loading:
             return
