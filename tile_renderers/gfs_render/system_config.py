@@ -72,7 +72,7 @@ class SystemConfig:
             "lon": 0,
             "start_hour_offset": 0,
             "total_days": 5,
-            "step_hours": 3
+            "step_hours": 6
         }'''
 
         # data = '''{

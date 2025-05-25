@@ -21,7 +21,7 @@ class RedisCacheBackend(ICacheBackend):
         return data
 
     def available(self, key: str) -> bool:
-        return self.client.exists(key)
+        return bool(self.client.exists(key))
 
     def set(self, key: str, value: Any, expire: int = 86400):
         # e.g., store raw bytes or pickled
