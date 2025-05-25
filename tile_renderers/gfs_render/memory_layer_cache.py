@@ -4,17 +4,17 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Tuple, List, Any, Optional
 import logging
 from datetime import datetime, timedelta
-from gfs_render import ModelService, SystemConfig, RedisCacheBackend
+from gfs_render import ModelService, SystemConfig
 import pickle
 logger = logging.getLogger(__name__)
-from .caching.cache import CACHE_TTL
+from .caching.cache import ICacheBackend, CACHE_TTL
 
 class MemoryLayerCache:
     """
     In-memory cache of interpolator layers for each (param_key, hour_offset).
     Preloads using ModelService.get_or_build_interpolator and serves full 5-day forecasts in memory.
     """
-    def __init__(self, model_service: ModelService, memory: RedisCacheBackend):
+    def __init__(self, model_service: ModelService, memory: ICacheBackend):
         self.model_service = model_service
         cfg = SystemConfig().get_default_forecast_json()
         self.model = cfg["model"]
@@ -44,7 +44,7 @@ class MemoryLayerCache:
         # print("[MemoryLayerCache] Preload complete.")
         #
 
-    def isLoading(self):
+    def is_loading(self):
        return self._loading and self._init_run
 
     def preload(self):
