@@ -394,7 +394,7 @@ async def _prewarm_loop(
             # layer_cache.loadOffset();
             await loop.run_in_executor(
                 None,
-                lambda: layer_cache.loadOffset()
+                lambda: layer_cache.preload()
             )
             # if timeseries:
             #     # serialize and stash in Redis (adjust key‐format however you like)
