@@ -328,6 +328,38 @@ class ModelService:
         step_type:  Optional[str] = None):
         return f"interp:{model}:{param_key}:{self.todays_hour_with_date(hour_offset)}:{level}:{level_type}:{step_type}"
 
+    def generate_interpolator(self, model: str, param_key: str, hour_offset: int, level:  Optional[int] = None, level_type:  Optional[str] = None, step_type: Optional[str] = None):
+
+        file_path = self.get_grib_file(model, hour_offset)
+        pm = self.build_param_map_for_offset(model)
+        param_name = pm.get(param_key)
+        if not param_name:
+            return None
+
+        try:
+            with pygrib.open(file_path) as grbs: # type: ignore
+                g = self._select_grib_message(grbs, param_name, level, level_type, step_type)
+                if not g:
+                    return None
+                data = g.values
+                lats, lons = g.latlons()
+                lat_flip = self.flip_latitudes(self.build_interpolator_key(model, param_key, hour_offset, level, level_type, step_type), g)
+                ip = self.interpolator.build_interpolator(data, lats, lons, lat_flip=lat_flip, decimation=self.decimation)
+                # meta = self._extract_grib_metadata(g)
+                gmin = float(getattr(g, "minimum", 0.0))
+                gmax = float(getattr(g, "maximum", 1.0))
+                ip.gmin, ip.gmax = self.update_and_get_min_max(model, param_key, level if level is not None else 0,
+                                                               level_type if level_type is not None else 'surface',
+                                                               step_type if step_type is not None else 'instant',
+                                                               gmin, gmax)
+                ip.missing_val = float(getattr(g, "missingValue", 9999.0))
+                # Cache both the interpolator and its metadata together.
+                ip(self.config.get_global_pts_boundaries())
+                return ip
+        except Exception as e:
+            logger.error(f"Error building interpolator: {e}", exc_info=True)
+            return None
+
     def get_or_build_interpolator(
         self,
         model: str,
@@ -342,36 +374,37 @@ class ModelService:
         """
         cache_key = self.get_interpolator_cache_key(model, param_key, hour_offset, level, level_type, step_type)
         def compute():
-            fp = self.get_grib_file(model, hour_offset)
-            if not fp:
-                return None
-            pm = self.build_param_map_for_offset(model)
-            param_name = pm.get(param_key)
-            if not param_name:
-                return None
-            try:
-                with pygrib.open(fp) as grbs: # type: ignore
-                    g = self._select_grib_message(grbs, param_name, level, level_type, step_type)
-                    if not g:
-                        return None
-                    data = g.values
-                    lats, lons = g.latlons()
-                    lat_flip = self.flip_latitudes(self.build_interpolator_key(model, param_key, hour_offset, level, level_type, step_type), g)
-                    ip = self.interpolator.build_interpolator(data, lats, lons, lat_flip=lat_flip, decimation=self.decimation)
-                    # meta = self._extract_grib_metadata(g)
-                    gmin = float(getattr(g, "minimum", 0.0))
-                    gmax = float(getattr(g, "maximum", 1.0))
-                    ip.gmin, ip.gmax = self.update_and_get_min_max(model, param_key, level if level is not None else 0,
-                                                                   level_type if level_type is not None else 'surface',
-                                                                   step_type if step_type is not None else 'instant',
-                                                                   gmin, gmax)
-                    ip.missing_val = float(getattr(g, "missingValue", 9999.0))
-                    # Cache both the interpolator and its metadata together.
-                    ip(self.config.get_global_pts_boundaries())
-                    return ip
-            except Exception as e:
-                logger.error(f"Error building interpolator: {e}", exc_info=True)
-                return None
+            return self.generate_interpolator(model, param_key, hour_offset, level, level_type, step_type)
+            # fp = self.get_grib_file(model, hour_offset)
+            # if not fp:
+            #     return None
+            # pm = self.build_param_map_for_offset(model)
+            # param_name = pm.get(param_key)
+            # if not param_name:
+            #     return None
+            # try:
+            #     with pygrib.open(fp) as grbs: # type: ignore
+            #         g = self._select_grib_message(grbs, param_name, level, level_type, step_type)
+            #         if not g:
+            #             return None
+            #         data = g.values
+            #         lats, lons = g.latlons()
+            #         lat_flip = self.flip_latitudes(self.build_interpolator_key(model, param_key, hour_offset, level, level_type, step_type), g)
+            #         ip = self.interpolator.build_interpolator(data, lats, lons, lat_flip=lat_flip, decimation=self.decimation)
+            #         # meta = self._extract_grib_metadata(g)
+            #         gmin = float(getattr(g, "minimum", 0.0))
+            #         gmax = float(getattr(g, "maximum", 1.0))
+            #         ip.gmin, ip.gmax = self.update_and_get_min_max(model, param_key, level if level is not None else 0,
+            #                                                        level_type if level_type is not None else 'surface',
+            #                                                        step_type if step_type is not None else 'instant',
+            #                                                        gmin, gmax)
+            #         ip.missing_val = float(getattr(g, "missingValue", 9999.0))
+            #         # Cache both the interpolator and its metadata together.
+            #         ip(self.config.get_global_pts_boundaries())
+            #         return ip
+            # except Exception as e:
+            #     logger.error(f"Error building interpolator: {e}", exc_info=True)
+            #     return None
         interpolator_cache = self.interpolator_cache.get_interpolator(cache_key)
         if interpolator_cache:
             return interpolator_cache
