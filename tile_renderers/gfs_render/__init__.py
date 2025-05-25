@@ -6,4 +6,5 @@ from .threads import ConcurrencyService
 from .system_config import SystemConfig
 from .layer_cache_service import LayerCacheService, NumGridCacheService
 from .layer_slice_caching import LayerSliceCaching
-__all__ = ["TileRendering", "ModelService", "RedisCacheBackend", "InMemoryCacheBackend", "ConcurrencyService","SystemConfig", "LayerCacheService", "NumGridCacheService", "LayerSliceCaching"]
+from .memory_layer_cache import MemoryLayerCache
+__all__ = ["TileRendering", "ModelService", "RedisCacheBackend", "InMemoryCacheBackend", "ConcurrencyService","SystemConfig", "LayerCacheService", "NumGridCacheService", "LayerSliceCaching", "MemoryLayerCache"]

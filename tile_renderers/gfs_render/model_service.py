@@ -906,8 +906,10 @@ class ModelService:
         step_type: Optional[str] = None,
     ):
         cache_key = self._get_grib_dict_values_key(model, hour_offset)
+        print("Asking for", cache_key)
         values = self._cache_get(cache_key) or {}
         param_keys = self.get_all_missing_key_strings(search_parameters, values, level, type_of_level, step_type)
+        print("GOT THIS", values, cache_key)
         if len(param_keys) == 0:
             return values
         pm = self.build_param_map_for_offset(model)

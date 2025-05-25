@@ -2,7 +2,7 @@ import redis
 from typing import Any, Optional
 from .cache import ICacheBackend
 class RedisCacheBackend(ICacheBackend):
-    def __init__(self, host="ai.local", port=6379, db=0):
+    def __init__(self, host="localhost", port=6379, db=0):
         self.client = redis.StrictRedis(host=host, port=port, db=db)
 
     def get(self, key: str) -> Optional[Any]:
@@ -11,6 +11,9 @@ class RedisCacheBackend(ICacheBackend):
             return None
         # Up to you to handle serialization (e.g. pickling)
         return data
+
+    def available(self, key: str) -> bool:
+        return self.client.exists(key)
 
     def set(self, key: str, value: Any, expire: int = 86400):
         # e.g., store raw bytes or pickled

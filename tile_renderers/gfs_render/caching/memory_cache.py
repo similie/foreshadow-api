@@ -14,3 +14,6 @@ class InMemoryCacheBackend(ICacheBackend):
     def delete(self, key: str):
         if key in self.store:
             del self.store[key]
+
+    def available(self, key: str) -> bool:
+         return key in self.store

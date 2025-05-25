@@ -12,6 +12,10 @@ class LocalStorage(ICacheBackend):
         self._cleaner_thread = threading.Thread(target=self._cleanup_thread, daemon=True)
         self._cleaner_thread.start()
 
+    def available(self, key: str) -> bool:
+        with self._lock:
+            return key in self.data
+
     def set(self, key, value, expire: int = 0):
         with self._lock:
             self.data[key] = value

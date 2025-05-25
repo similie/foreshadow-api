@@ -30,7 +30,7 @@ from pydantic import BaseModel
 
 
 # Import your project modules (adjust paths as needed)
-from gfs_render import ModelService, RedisCacheBackend, TileRendering, SystemConfig
+from gfs_render import ModelService, RedisCacheBackend, TileRendering, SystemConfig, MemoryLayerCache
 # from gfs_render.time_logger import TimeLogger
 
 
@@ -43,6 +43,12 @@ backend_cache = RedisCacheBackend()
 # Set preload_layers=True if you want to prewarm interpolators on startup.
 model_service = ModelService(backend_cache)
 tile_renderer = TileRendering(model_service)
+
+layer_cache = MemoryLayerCache(
+    model_service,
+    backend_cache
+)
+
 
 app = FastAPI(title="Global Norm Map Server", version="1.0")
 # (Optional) Add CORS middleware if needed.
@@ -240,33 +246,46 @@ async def forecast_streaming_route(request: Request):
     return StreamingResponse(stream_forecast(), media_type="text/event-stream")
 
 @app.get("/forecast")
-def predefined_forecast(lat: float, lon: float , hour_offset: int = 0):
-    total_days = 5
-    max_hours = 24 * (total_days - 1 )
-    if hour_offset > max_hours:
-        return HTTPException(status_code=400, detail="Invalid hour offset. It cannot exceed four days")
+def forecast(lat: float, lon: float, hour_offset: int = 0):
+    try:
 
-    if lat is None or lon is None:
-        return HTTPException(status_code=400, detail="Missing required fields: lat, lon.")
+        if layer_cache.isLoading():
+            raise HTTPException(status_code=404, detail="Data is not ready for output.")
 
-    total_days = int(math.floor(round(((24 * total_days) - hour_offset) / 24)))
-    config = SystemConfig()
-    jsonData = config.get_default_forecast_json()
-    print("working it", jsonData)
-    timeseries = model_service.get_point_forecast_timeseries(
-        model=jsonData["model"],
-        param_keys=jsonData["param_keys"],
-        lat=lat,
-        lon=lon,
-        start_hour_offset=hour_offset,
-        total_days=total_days,
-        step_hours=jsonData["step_hours"],
-    )
-    print("GOT THIS BITCH", timeseries)
-    if not timeseries:
-        return JSONResponse(content=[], status_code=200)
-    return JSONResponse(content=timeseries)
-    return JSONResponse(content=jsonData)
+        result = layer_cache.get_slices(lat, lon, hour_offset)
+        if not result:
+            raise HTTPException(status_code=404, detail="No data for that offset.")
+        return JSONResponse(content=result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+# @app.get("/forecast")
+# def predefined_forecast(lat: float, lon: float , hour_offset: int = 0):
+#     total_days = 5
+#     max_hours = 24 * (total_days - 1 )
+#     if hour_offset > max_hours:
+#         return HTTPException(status_code=400, detail="Invalid hour offset. It cannot exceed four days")
+
+#     if lat is None or lon is None:
+#         return HTTPException(status_code=400, detail="Missing required fields: lat, lon.")
+
+#     total_days = int(math.floor(round(((24 * total_days) - hour_offset) / 24)))
+#     config = SystemConfig()
+#     jsonData = config.get_default_forecast_json()
+#     print("working it", jsonData)
+#     timeseries = model_service.get_point_forecast_timeseries(
+#         model=jsonData["model"],
+#         param_keys=jsonData["param_keys"],
+#         lat=lat,
+#         lon=lon,
+#         start_hour_offset=hour_offset,
+#         total_days=total_days,
+#         step_hours=jsonData["step_hours"],
+#     )
+#     print("GOT THIS BITCH", timeseries)
+#     if not timeseries:
+#         return JSONResponse(content=[], status_code=200)
+#     return JSONResponse(content=timeseries)
+#     return JSONResponse(content=jsonData)
 
 @app.post("/forecast")
 async def forecast_route(request: Request):
@@ -312,13 +331,14 @@ async def forecast_route(request: Request):
         type_of_level=user_tof,
         step_type=step_type
     )
+    print("MY TIME SERIES", timeseries)
     if not timeseries:
         return JSONResponse(content=[], status_code=200)
     return JSONResponse(content=timeseries)
 #———————————————————————————————
 # 1) the “pre-warm” worker
 #———————————————————————————————
-async def _prewarm_loop(
+async def _prewarm_loop_bak(
     models: Sequence[str],
     param_keys:Union[str, List[Union[str, Dict[str, Any]]]],
     interval_s: float = 60.0,
@@ -358,6 +378,33 @@ async def _prewarm_loop(
         # wait before next one
         await asyncio.sleep(interval_s)
 
+
+async def _prewarm_loop(
+    models: Sequence[str],
+    param_keys:Union[str, List[Union[str, Dict[str, Any]]]],
+    interval_s: float = 60.0,
+    total_days: int = 5,
+    step_hours: int = 3,
+    start_hour_offset: int = 0,
+):
+    loop = asyncio.get_event_loop()
+    while True:
+        # pick random lat/lon in valid ranges
+        try:
+            # layer_cache.loadOffset();
+            await loop.run_in_executor(
+                None,
+                lambda: layer_cache.loadOffset()
+            )
+            # if timeseries:
+            #     # serialize and stash in Redis (adjust key‐format however you like)
+            #     cache_key = f"prewarm:{model}:{lat:.4f},{lon:.4f}:{start_hour_offset}:{total_days}d:{step_hours}h"
+            #     backend_cache.set(cache_key, json.dumps(timeseries), expire=3600)
+            #     logger.info(f"Pre-warmed cache key={cache_key}")
+        except Exception as exc:
+            logger.error(f"Pre-warm failed {exc}")
+        # wait before next one
+        await asyncio.sleep(interval_s)
 #———————————————————————————————
 # 2) start it on app startup
 #———————————————————————————————
@@ -370,6 +417,7 @@ async def kick_off_prewarm():
     param_keys = cfg["param_keys"]
     # launch the infinite prewarm task
     print("GETTING STARTING WITH THIS")
+
     asyncio.create_task(_prewarm_loop(models, param_keys, interval_s=600.0))
 ###############################################################################
 # Main entry point
