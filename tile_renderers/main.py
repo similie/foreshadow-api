@@ -17,7 +17,6 @@ Run with multiple worker processes (via Uvicorn) to help with CPU‐bound work.
 """
 import json
 import os
-import math
 import io
 import logging
 from typing import  List, Optional, Union, Dict, Any, Sequence
@@ -28,9 +27,9 @@ import asyncio, random
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-
+slave = "SLAVE_MODE" in os.environ
 # Import your project modules (adjust paths as needed)
-from gfs_render import ModelService, RedisCacheBackend, TileRendering, SystemConfig, MemoryLayerCache
+from gfs_render import ModelService, RedisCacheBackend, TileRendering, MemoryLayerCache
 # from gfs_render.time_logger import TimeLogger
 
 
@@ -245,13 +244,23 @@ async def forecast_streaming_route(request: Request):
 
     return StreamingResponse(stream_forecast(), media_type="text/event-stream")
 
+@app.get("/point", response_model=dict)
+def forecast_point(lat: float, lon: float, hour_offset: int = 0):
+    if layer_cache.is_loading():
+        raise HTTPException(status_code=404, detail="Data is not ready for output.")
+    try:
+        result = layer_cache.get_current_slice(lat, lon, hour_offset)
+        if not result:
+            raise HTTPException(status_code=404, detail="No data for that offset.")
+        return JSONResponse(content=result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/forecast")
 def forecast(lat: float, lon: float, hour_offset: int = 0):
+    if layer_cache.is_loading():
+        raise HTTPException(status_code=404, detail="Data is not ready for output.")
     try:
-
-        if layer_cache.is_loading():
-            raise HTTPException(status_code=404, detail="Data is not ready for output.")
-
         result = layer_cache.get_slices(lat, lon, hour_offset)
         if not result:
             raise HTTPException(status_code=404, detail="No data for that offset.")
@@ -380,12 +389,7 @@ async def _prewarm_loop_bak(
 
 
 async def _prewarm_loop(
-    models: Sequence[str],
-    param_keys:Union[str, List[Union[str, Dict[str, Any]]]],
     interval_s: float = 60.0,
-    total_days: int = 5,
-    step_hours: int = 3,
-    start_hour_offset: int = 0,
 ):
     loop = asyncio.get_event_loop()
     while True:
@@ -394,7 +398,7 @@ async def _prewarm_loop(
             # layer_cache.loadOffset();
             await loop.run_in_executor(
                 None,
-                lambda: layer_cache.preload()
+                lambda: layer_cache.preload_to_local() if slave else layer_cache.preload()
             )
             # if timeseries:
             #     # serialize and stash in Redis (adjust key‐format however you like)
@@ -404,21 +408,16 @@ async def _prewarm_loop(
         except Exception as exc:
             logger.error(f"Pre-warm failed {exc}")
         # wait before next one
+        #
+        print("PRELOAD EXECUTION COMPLETE")
         await asyncio.sleep(interval_s)
 #———————————————————————————————
 # 2) start it on app startup
 #———————————————————————————————
 @app.on_event("startup")
 async def kick_off_prewarm():
-        # decide which models & param_keys to pre-warm:
-        # you could read SystemConfig, or hard-code a list, e.g.:
-    cfg = SystemConfig().get_default_forecast_json()
-    models = [cfg["model"]]
-    param_keys = cfg["param_keys"]
-    # launch the infinite prewarm task
-    print("GETTING STARTING WITH THIS")
-
-    asyncio.create_task(_prewarm_loop(models, param_keys, interval_s=600.0))
+    print("GETTING STARTING WITH PREWARMING")
+    asyncio.create_task(_prewarm_loop(600.0))
 ###############################################################################
 # Main entry point
 ###############################################################################

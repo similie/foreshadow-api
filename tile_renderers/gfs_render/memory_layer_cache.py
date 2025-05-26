@@ -1,10 +1,10 @@
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, Tuple, List, Any, Optional
+from typing import Dict, List, Any, Optional
 import logging
 from datetime import datetime, timedelta
-from gfs_render import ModelService, SystemConfig
+from gfs_render import ModelService, SystemConfig, LocalStorage
 import pickle
 logger = logging.getLogger(__name__)
 from .caching.cache import ICacheBackend, CACHE_TTL
@@ -26,15 +26,21 @@ class MemoryLayerCache:
         total_hours = total_days * 24
         range1 = list(range(0, total_hours + 1, step_hours))
         range2 = list(range(1, total_hours + 2, step_hours))
-        self.offsets = sorted(set(range1 + range2))
+        if "BIG_MEMORY" in os.environ:
+            self.offsets = list(range(0, total_hours + 1, 1)) # we do every hour
+        else:
+            self.offsets = sorted(set(range1 + range2))
+
+        self.offsets_primary = sorted(range1)
         # self.offsets = list(range(0, total_days * 24 + 1, step_hours))
         print('DOING THESE OFFSETS', self.offsets)
         # Key: (param_key, hour_key) -> interpolator instance
-        self._cache: Dict[Tuple[str, str], Any] = {}
+        self._cache: Dict[str, Any] = {}
         self._lock = threading.Lock()
         self._loading = False
         self._init_run = True
         self._cacheStore = memory
+        self._localStorage = LocalStorage()
 
         # Preload all layers in parallel
         # workers = os.cpu_count() or 4
@@ -109,6 +115,84 @@ class MemoryLayerCache:
             #     self._cache[(pk, hour_key)] = ip
         print(f"[Preload] Completed offset {off}")
 
+    def _get_cached_values(self, pk: str, offset: int):
+        """
+        We super-charge caching, using a local memory layer with a redis-backed cache layer
+        """
+        key = self._get_cache_key(pk, offset)
+        if self._localStorage.available(key):
+            return self._localStorage.get(key)
+        ip = self._cache_get(key)
+        self._localStorage.set(key, ip, CACHE_TTL)
+        return ip
+
+    def _get_base_time(self):
+        now = datetime.utcnow()
+        if now.minute >= 30:
+            now += timedelta(hours=1)
+        base_time = now.replace(minute=0, second=0, microsecond=0)
+        return base_time
+
+    def _get_ip_with_fallback(self, pk: str, off: int):
+        ip = self._get_cached_values(pk, off)
+        if not ip:
+            print(f"[Fetch] Missing {pk}@{off}")
+            self._preload_offset(off)
+            ip = self._get_cached_values(pk, off)
+            if not ip:
+                return None
+        return ip
+
+    def get_current_slice(self, lat: float, lon: float, off: int):
+        dt = self._get_base_time() + timedelta(hours=off)
+        records = []
+        print(f"[Fetch] Computing offset={off} hour_key={off}")
+        for entry in self.param_keys:
+            pk = entry["param_key"]
+            ip = self._get_ip_with_fallback(pk, off)
+            if not ip:
+                continue
+            # ip = self._cache_get(key)
+            print(f"I have the ip for {pk} {off}")
+
+            try:
+                val = float(ip(lat, lon))
+            except Exception as e:
+                print(f"[Fetch] Error {pk}@{off}: {e}")
+                continue
+            records.append((pk, {"datetime": dt.isoformat(), "value": val}))
+        return records
+
+    def load_slices(self, off: int):
+        print(f"[Fetch] Computing offset={off} hour_key={off}")
+        for entry in self.param_keys:
+            pk = entry["param_key"]
+            self._get_ip_with_fallback(pk, off)
+            return (pk,off)
+
+    def preload_to_local(self):
+        if self._loading:
+            return
+
+        self._loading = True
+        offsets = [off for off in self.offsets_primary if off >= 0]
+        max_workers = os.cpu_count() or 4
+        length = len(offsets) * len(self.param_keys)
+        total_length = 0
+        def _compute_for_offset(off: int):
+            # hour_key = self.model_service.todays_hour_with_date(off)
+            # dt = base_time + timedelta(hours=off)
+            return self.load_slices(off)
+        with ThreadPoolExecutor(max_workers=max_workers) as exe:
+            futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
+            for fut in as_completed(futures):
+                total_length += 1
+                print(f"COMPLETED {fut.result()} {total_length} of {length} ")
+
+        self._loading = False
+        self._init_run = False
+
+
     def get_slices(
         self,
         lat: float,
@@ -121,34 +205,19 @@ class MemoryLayerCache:
         Each param_key is returned with an ordered list of (datetime, value) pairs.
         """
         # Determine base timestamp (rounded up at 30min)
-        now = datetime.utcnow()
-        if now.minute >= 30:
-            now += timedelta(hours=1)
-        base_time = now.replace(minute=0, second=0, microsecond=0)
+        # now = datetime.utcnow()
+        # if now.minute >= 30:
+        #     now += timedelta(hours=1)
+        # base_time = now.replace(minute=0, second=0, microsecond=0)
         # Filter offsets at or after start_offset
-        offsets = [off for off in self.offsets if off >= start_offset]
+        offsets = [off for off in self.offsets_primary if off >= start_offset]
         print(f"[Fetch] Generating timeseries from offsets {offsets}")
 
         # Helper to compute one offset's slice
         def _compute_for_offset(off: int):
             # hour_key = self.model_service.todays_hour_with_date(off)
-            dt = base_time + timedelta(hours=off)
-            records = []
-            print(f"[Fetch] Computing offset={off} hour_key={off}")
-            for entry in self.param_keys:
-                pk = entry["param_key"]
-                key = self._get_cache_key(pk, off)
-                ip = self._cache_get(key)
-                if not ip:
-                    print(f"[Fetch] Missing {pk}@{off}")
-                    continue
-                try:
-                    val = float(ip(lat, lon))
-                except Exception as e:
-                    print(f"[Fetch] Error {pk}@{off}: {e}")
-                    continue
-                records.append((pk, {"datetime": dt.isoformat(), "value": val}))
-            return records
+            # dt = base_time + timedelta(hours=off)
+            return self.get_current_slice(lat, lon, off)
 
         # Parallel fetch
         max_workers = os.cpu_count() or 4
