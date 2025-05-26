@@ -26,6 +26,10 @@ from fastapi.responses import StreamingResponse, JSONResponse
 import asyncio, random
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from dotenv import load_dotenv
+
+# Load .env into os.environ (doesn't override by default)
+load_dotenv()
 
 slave = "SLAVE_MODE" in os.environ
 # Import your project modules (adjust paths as needed)

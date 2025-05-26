@@ -48,6 +48,12 @@ Foreshadow API provides efficient, real-time access to Global Forecast System (G
 ## Running the API
 To launch the API server:
 
+## GDAL Required
+We have test with [GDAL](https://gdal.org/en/stable/development/building_from_source.html) version [3.10.2](https://gdal.org/en/stable/download_past.html#download-past)
+
+## Memory Requirements
+Ensure sufficient memory is allocated for the API server to handle concurrent requests effectively. To preload the data for radid forecasts, we recommend a server with at least 256GB of RAM. The dataset is 4 dimensional and requires significant resources to run.
+
 ```bash
 uvicorn main:app --host 0.0.0.0 --port 5001 --workers $(nproc)
 ```
