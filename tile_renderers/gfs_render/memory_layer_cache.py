@@ -123,15 +123,15 @@ class MemoryLayerCache:
         We super-charge caching, using a local memory layer with a redis-backed cache layer
         """
         key = self._get_cache_key(pk, offset)
-        if key in self._cache:
-            return self._cache[key]
-        # if self._localStorage.available(key):
-            # return self._localStorage.get(key)
+        # if key in self._cache:
+        #     return self._cache[key]
+        if self._localStorage.available(key):
+            return self._localStorage.get(key)
         ip = self._cache_get(key)
         if ip:
-            with self._lock:
-                self._cache[key] = ip
-        # self._localStorage.set(key, ip, CACHE_TTL)
+            # with self._lock:
+            #     self._cache[key] = ip
+            self._localStorage.set(key, ip, CACHE_TTL)
         return ip
 
     def _get_base_time(self):
@@ -145,10 +145,10 @@ class MemoryLayerCache:
         ip = self._get_cached_values(pk, off)
         if not ip:
             print(f"[Fetch] Missing {pk}@{off}")
-            self._preload_offset(off)
-            ip = self._get_cached_values(pk, off)
-            if not ip:
-                return None
+            # self._preload_offset(off)
+            # ip = self._get_cached_values(pk, off)
+            # if not ip:
+            #     return None
         return ip
 
     def get_current_slice(self, lat: float, lon: float, off: int):
