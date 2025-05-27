@@ -51,6 +51,13 @@ To launch the API server:
 ## GDAL Required
 We have test with [GDAL](https://gdal.org/en/stable/development/building_from_source.html) version [3.10.2](https://gdal.org/en/stable/download_past.html#download-past)
 
+### Requirements
+- libeigen3-dev
+- libboost-all-dev
+- libpq-dev
+- build-essential
+- cmake
+
 ## Memory Requirements
 Ensure sufficient memory is allocated for the API server to handle concurrent requests effectively. To preload the data for radid forecasts, we recommend a server with at least 256GB of RAM. The dataset is 4 dimensional and requires significant resources to run.
 
@@ -61,6 +68,7 @@ uvicorn main:app --host 0.0.0.0 --port 5001 --workers $(nproc)
 Replace `$(nproc)` with the desired number of worker processes.
 
 ## Dependencies
+- python3.12
 - FastAPI
 - Uvicorn
 - Redis
