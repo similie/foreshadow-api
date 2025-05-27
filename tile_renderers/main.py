@@ -399,6 +399,7 @@ async def _prewarm_loop(
     loop = asyncio.get_event_loop()
     while True:
         # pick random lat/lon in valid ranges
+        print(f"PRELOAD EXECUTION STARTED {slave}")
         try:
             # layer_cache.loadOffset();
             await loop.run_in_executor(
