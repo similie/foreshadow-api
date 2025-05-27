@@ -123,10 +123,15 @@ class MemoryLayerCache:
         We super-charge caching, using a local memory layer with a redis-backed cache layer
         """
         key = self._get_cache_key(pk, offset)
-        if self._localStorage.available(key):
-            return self._localStorage.get(key)
+        if key in self._cache:
+            return self._cache[key]
+        # if self._localStorage.available(key):
+            # return self._localStorage.get(key)
         ip = self._cache_get(key)
-        self._localStorage.set(key, ip, CACHE_TTL)
+        if ip:
+            with self._lock:
+                self._cache[key] = ip
+        # self._localStorage.set(key, ip, CACHE_TTL)
         return ip
 
     def _get_base_time(self):
@@ -179,6 +184,7 @@ class MemoryLayerCache:
 
         self._loading = True
         offsets = [off for off in self.offsets_primary if off >= 0]
+        print(f"LOADING THESE OFFSET {offsets}")
         max_workers = os.cpu_count() or 4
         length = len(offsets) * len(self.param_keys)
         total_length = 0
