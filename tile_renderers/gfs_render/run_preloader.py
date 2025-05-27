@@ -2,6 +2,10 @@
 import logging
 import asyncio
 from gfs_render import ModelService, RedisCacheBackend, MemoryLayerCache
+from dotenv import load_dotenv, find_dotenv
+env_file = find_dotenv()                     # returns path or ''
+print("Loading .env from:", env_file)
+load_dotenv(env_file, verbose=True)
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -22,6 +26,7 @@ async def _prewarm_loop(
     loop = asyncio.get_event_loop()
     while True:
         # pick random lat/lon in valid ranges
+        print("Running preloader...")
         try:
             # layer_cache.loadOffset();
             await loop.run_in_executor(
