@@ -9,8 +9,8 @@ After=network.target
 
 [Service]
 User=root
-WorkingDirectory=/root/foreshadow-api/tile_renderers/gfs_render
-ExecStart=/bin/bash -c 'source /root/foreshadow-api/.venv/bin/activate && python3 run_preloader.py'
+WorkingDirectory=/root/foreshadow-api
+ExecStart=/bin/bash -c 'source /root/foreshadow-api/.venv/bin/activate && python3 -m tile_renderers.gfs_render.run_preloader'
 
 Restart=always
 
