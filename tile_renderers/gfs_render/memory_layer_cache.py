@@ -80,7 +80,7 @@ class MemoryLayerCache:
                 logger.error(f"Error unpickling cache key {key}: {e}")
         return None
 
-    def _cache_set(self, key: str, value: Any, expire: int = CACHE_TTL) -> None:
+    def _cache_set(self, key: str, value: Any, expire: int = CACHE_TTL * 3) -> None:
         try:
             self._cacheStore.set(key, pickle.dumps(value, protocol=4), expire=expire)
         except Exception as e:
@@ -131,7 +131,7 @@ class MemoryLayerCache:
         if ip:
             # with self._lock:
             #     self._cache[key] = ip
-            self._localStorage.set(key, ip, CACHE_TTL)
+            self._localStorage.set(key, ip, CACHE_TTL * 3)
         return ip
 
     def _get_base_time(self):
@@ -145,10 +145,10 @@ class MemoryLayerCache:
         ip = self._get_cached_values(pk, off)
         if not ip:
             print(f"[Fetch] Missing {pk}@{off}")
-            # self._preload_offset(off)
-            # ip = self._get_cached_values(pk, off)
-            # if not ip:
-            #     return None
+            self._preload_offset(off)
+            ip = self._get_cached_values(pk, off)
+            if not ip:
+                return None
         return ip
 
     def get_current_slice(self, lat: float, lon: float, off: int):
@@ -191,7 +191,11 @@ class MemoryLayerCache:
         def _compute_for_offset(off: int):
             # hour_key = self.model_service.todays_hour_with_date(off)
             # dt = base_time + timedelta(hours=off)
-            return self.load_slices(off)
+            try:
+                return self.load_slices(off)
+            except Exception as e:
+                print(f"ERROR {e}")
+
         with ThreadPoolExecutor(max_workers=max_workers) as exe:
             futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
             for fut in as_completed(futures):

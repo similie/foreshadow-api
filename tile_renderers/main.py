@@ -251,8 +251,8 @@ async def forecast_streaming_route(request: Request):
 
 @app.get("/point", response_model=dict)
 def forecast_point(lat: float, lon: float, hour_offset: int = 0):
-    # if layer_cache.is_loading():
-    #     raise HTTPException(status_code=404, detail="Data is not ready for output.")
+    if layer_cache.is_loading():
+        raise HTTPException(status_code=404, detail="Data is not ready for output.")
     try:
         result = layer_cache.get_current_slice(lat, lon, hour_offset)
         if not result:
@@ -263,8 +263,8 @@ def forecast_point(lat: float, lon: float, hour_offset: int = 0):
 
 @app.get("/forecast")
 def forecast(lat: float, lon: float, hour_offset: int = 0):
-    # if layer_cache.is_loading():
-    #     raise HTTPException(status_code=404, detail="Data is not ready for output.")
+    if layer_cache.is_loading():
+        raise HTTPException(status_code=404, detail="Data is not ready for output.")
     try:
         result = layer_cache.get_slices(lat, lon, hour_offset)
         if not result:
@@ -396,23 +396,23 @@ async def _prewarm_loop_bak(
 async def _prewarm_loop(
     interval_s: float = 60.0,
 ):
-    # loop = asyncio.get_event_loop()
+    loop = asyncio.get_event_loop()
     while True:
         # pick random lat/lon in valid ranges
         print(f"PRELOAD EXECUTION STARTED {slave}")
-        # try:
-        #     # layer_cache.loadOffset();
-        #     await loop.run_in_executor(
-        #         None,
-        #         lambda: layer_cache.preload_to_local() if slave else layer_cache.preload()
-        #     )
-        #     # if timeseries:
-        #     #     # serialize and stash in Redis (adjust key‐format however you like)
-        #     #     cache_key = f"prewarm:{model}:{lat:.4f},{lon:.4f}:{start_hour_offset}:{total_days}d:{step_hours}h"
-        #     #     backend_cache.set(cache_key, json.dumps(timeseries), expire=3600)
-        #     #     logger.info(f"Pre-warmed cache key={cache_key}")
-        # except Exception as exc:
-        #     logger.error(f"Pre-warm failed {exc}")
+        try:
+            # layer_cache.loadOffset();
+            await loop.run_in_executor(
+                None,
+                lambda: layer_cache.preload_to_local() if slave else layer_cache.preload()
+            )
+            # if timeseries:
+            #     # serialize and stash in Redis (adjust key‐format however you like)
+            #     cache_key = f"prewarm:{model}:{lat:.4f},{lon:.4f}:{start_hour_offset}:{total_days}d:{step_hours}h"
+            #     backend_cache.set(cache_key, json.dumps(timeseries), expire=3600)
+            #     logger.info(f"Pre-warmed cache key={cache_key}")
+        except Exception as exc:
+            logger.error(f"Pre-warm failed {exc}")
         # wait before next one
         #
         print("PRELOAD EXECUTION COMPLETE")
@@ -423,7 +423,7 @@ async def _prewarm_loop(
 @app.on_event("startup")
 async def kick_off_prewarm():
     print("GETTING STARTING WITH PREWARMING")
-    asyncio.create_task(_prewarm_loop(600.0))
+    asyncio.create_task(_prewarm_loop(800.0))
 ###############################################################################
 # Main entry point
 ###############################################################################
