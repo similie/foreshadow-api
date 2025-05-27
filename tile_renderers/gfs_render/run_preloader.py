@@ -1,7 +1,10 @@
 
 import logging
 import asyncio
-from gfs_render import ModelService, RedisCacheBackend, MemoryLayerCache
+# from gfs_render import ModelService, RedisCacheBackend, MemoryLayerCache
+from .model_service import ModelService
+from .caching.redis_cache import RedisCacheBackend
+from .memory_layer_cache import MemoryLayerCache
 from dotenv import load_dotenv, find_dotenv
 env_file = find_dotenv()                     # returns path or ''
 print("Loading .env from:", env_file)
@@ -41,4 +44,4 @@ async def _prewarm_loop(
         await asyncio.sleep(interval_s)
 
 if __name__ == "__main__":
-    asyncio.create_task(_prewarm_loop(600.0))
+    asyncio.run(_prewarm_loop(600.0))

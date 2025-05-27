@@ -4,7 +4,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Any, Optional
 import logging
 from datetime import datetime, timedelta
-from gfs_render import ModelService, SystemConfig, LocalStorage
+# from gfs_render import ModelService, SystemConfig, LocalStorage
+from .model_service import ModelService
+from .system_config import SystemConfig
+from .caching.local_cache import LocalStorage
 import pickle
 logger = logging.getLogger(__name__)
 from .caching.cache import ICacheBackend, CACHE_TTL
