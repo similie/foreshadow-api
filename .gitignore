@@ -9,3 +9,4 @@ grib
 __pycache__
 .ropeproject
 .env
+*.log
