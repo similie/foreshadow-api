@@ -28,5 +28,9 @@ class RedisCacheBackend(ICacheBackend):
         # e.g., store raw bytes or pickled
         self.client.set(key, value, ex=expire)
 
+    def extend(self, key: str, expire: int = 0):
+        if expire > 0:
+            self.client.expire(key, expire)
+
     def delete(self, key: str):
         self.client.delete(key)

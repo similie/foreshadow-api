@@ -427,11 +427,11 @@ class ModelService:
         if step_type is not None:
             search["stepType"] = step_type
 
-        print("I am this search here", search)
+        print("GRIB SEARCH CRITERIA", search)
         # if level is not None and type_of_level is not None:
         try:
             sel = grbs.select(**search)
-            print('I KEY GOT FOUND OUT', sel)
+            # print('I KEY GOT FOUND OUT', sel)
             if len(sel) == 1:
                 logger.debug(f"[Exact match] param={param_name}, level={level}, typeOfLevel={type_of_level}")
                 return sel[0]

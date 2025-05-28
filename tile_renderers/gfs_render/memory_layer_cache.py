@@ -44,7 +44,7 @@ class MemoryLayerCache:
         self._init_run = True
         self._cacheStore = memory
         self._localStorage = LocalStorage()
-
+        self._ttl = CACHE_TTL * 3
         # Preload all layers in parallel
         # workers = os.cpu_count() or 4
         # print(f"[MemoryLayerCache] Preloading {len(self.offsets)} offsets × {len(self.param_keys)} params using {workers} workers")
@@ -103,6 +103,7 @@ class MemoryLayerCache:
                 available = self._cacheStore.available(key)
                 print(f"[Preload] Building interpolator for {key} {available}")
                 if available:
+                    self._cacheStore.extend(key, self._ttl)
                     continue
                 ip = self.model_service.generate_interpolator(
                     self.model, pk, off, lvl, tof, stp
@@ -126,12 +127,14 @@ class MemoryLayerCache:
         # if key in self._cache:
         #     return self._cache[key]
         if self._localStorage.available(key):
+            self._localStorage.extend(key, self._ttl);
             return self._localStorage.get(key)
         ip = self._cache_get(key)
         if ip:
             # with self._lock:
             #     self._cache[key] = ip
-            self._localStorage.set(key, ip, CACHE_TTL * 3)
+            self._localStorage.set(key, ip)
+            self._cacheStore.extend(key, self._ttl);
         return ip
 
     def _get_base_time(self):
