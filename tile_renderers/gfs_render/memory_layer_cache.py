@@ -55,6 +55,10 @@ class MemoryLayerCache:
         # print("[MemoryLayerCache] Preload complete.")
         #
 
+    def get_worker_count(self):
+        max_cores = 24
+        cpu_count = os.cpu_count() or 4
+        return cpu_count if cpu_count < max_cores else max_cores if cpu_count > max_cores else 4
     def load_offsets(self):
         cfg = SystemConfig().get_default_forecast_json()
         total_days = cfg.get("total_days", 5)
@@ -87,7 +91,7 @@ class MemoryLayerCache:
         self._loading = True
         workers = os.cpu_count() or 4
         print(f"[MemoryLayerCache] Preloading {len(self.offsets)} offsets × {len(self.param_keys)} params using {workers} workers")
-        with ThreadPoolExecutor(max_workers=workers) as executor:
+        with ThreadPoolExecutor(max_workers=self.get_worker_count()) as executor:
             executor.map(self._preload_offset, self.offsets)
 
         self._loading = False
@@ -211,7 +215,7 @@ class MemoryLayerCache:
         self._loading = True
         offsets = [off for off in self.offsets_primary if off >= 0]
         print(f"LOADING THESE OFFSET {offsets}")
-        max_workers = os.cpu_count() or 4
+
         length = len(offsets) * len(self.param_keys)
         total_length = 0
         def _compute_for_offset(off: int):
@@ -222,7 +226,7 @@ class MemoryLayerCache:
             except Exception as e:
                 print(f"ERROR {e}")
 
-        with ThreadPoolExecutor(max_workers=max_workers) as exe:
+        with ThreadPoolExecutor(max_workers=self.get_worker_count()) as exe:
             futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
             for fut in as_completed(futures):
                 total_length += 1
@@ -259,9 +263,8 @@ class MemoryLayerCache:
             return self.get_current_slice(lat, lon, off)
 
         # Parallel fetch
-        max_workers = os.cpu_count() or 4
         final: Dict[str, List[Dict[str, Any]]] = {entry["param_key"]: [] for entry in self.param_keys}
-        with ThreadPoolExecutor(max_workers=max_workers) as exe:
+        with ThreadPoolExecutor(max_workers=self.get_worker_count()) as exe:
             futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
             for fut in as_completed(futures):
                 off = futures[fut]
