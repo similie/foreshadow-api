@@ -45,7 +45,8 @@ class MemoryLayerCache:
         self._init_run = True
         self._cacheStore = memory
         self._localStorage = LocalStorage()
-        self._ttl = CACHE_TTL * 3
+        self._ttl = CACHE_TTL
+        self._ttl_3 = self._ttl * 3
         # Preload all layers in parallel
         # workers = os.cpu_count() or 4
         # print(f"[MemoryLayerCache] Preloading {len(self.offsets)} offsets × {len(self.param_keys)} params using {workers} workers")
@@ -102,9 +103,9 @@ class MemoryLayerCache:
                 logger.error(f"Error unpickling cache key {key}: {e}")
         return None
 
-    def _cache_set(self, key: str, value: Any, expire: int = CACHE_TTL * 3) -> None:
+    def _cache_set(self, key: str, value: Any) -> None:
         try:
-            self._cacheStore.set(key, pickle.dumps(value, protocol=4), expire=expire)
+            self._cacheStore.set(key, pickle.dumps(value, protocol=4), expire=self._ttl_3)
         except Exception as e:
             logger.error(f"Error setting cache key {key}: {e}")
 
@@ -125,7 +126,7 @@ class MemoryLayerCache:
                 available = self._cacheStore.available(key)
                 print(f"[Preload] Building interpolator for {key} {available}")
                 if available:
-                    self._cacheStore.extend(key, self._ttl)
+                    self._cacheStore.extend(key, self._ttl_3)
                     continue
                 ip = self.model_service.generate_interpolator(
                     self.model, pk, off, lvl, tof, stp
@@ -156,7 +157,7 @@ class MemoryLayerCache:
             # with self._lock:
             #     self._cache[key] = ip
             self._localStorage.set(key, ip)
-            self._cacheStore.extend(key, self._ttl);
+            self._cacheStore.extend(key, self._ttl_3);
         return ip
 
     def _get_base_time(self):
