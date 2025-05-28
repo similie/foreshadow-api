@@ -22,7 +22,8 @@ class SystemConfig:
                 "typeOfLevel": "surface",
                 "level": 0,
                 "stepType": "instant"
-            }, {
+            },
+            {
                 "param_key": "10-metre-u-wind-component",
                 "typeOfLevel": "heightAboveGround",
                 "level": 10,

@@ -32,7 +32,7 @@ env_file = find_dotenv()                     # returns path or ''
 print("Loading .env from:", env_file)
 load_dotenv(env_file, verbose=True)
 
-slave = "SLAVE_MODE" in os.environ
+# slave = "SLAVE_MODE" in os.environ
 # Import your project modules (adjust paths as needed)
 from gfs_render import ModelService, RedisCacheBackend, TileRendering, MemoryLayerCache
 # from gfs_render.time_logger import TimeLogger
@@ -399,12 +399,12 @@ async def _prewarm_loop(
     loop = asyncio.get_event_loop()
     while True:
         # pick random lat/lon in valid ranges
-        print(f"PRELOAD EXECUTION STARTED {slave}")
+        print("PRELOAD EXECUTION STARTED")
         try:
             # layer_cache.loadOffset();
             await loop.run_in_executor(
                 None,
-                lambda: layer_cache.preload_to_local() if slave else layer_cache.preload()
+                lambda: layer_cache.preload_to_local()
             )
             # if timeseries:
             #     # serialize and stash in Redis (adjust key‐format however you like)
@@ -423,7 +423,7 @@ async def _prewarm_loop(
 @app.on_event("startup")
 async def kick_off_prewarm():
     print("GETTING STARTING WITH PREWARMING")
-    asyncio.create_task(_prewarm_loop(800.0))
+    asyncio.create_task(_prewarm_loop(600.0))
 ###############################################################################
 # Main entry point
 ###############################################################################

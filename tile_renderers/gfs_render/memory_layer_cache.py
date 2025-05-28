@@ -3,11 +3,13 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Any, Optional
 import logging
+import math
 from datetime import datetime, timedelta
 # from gfs_render import ModelService, SystemConfig, LocalStorage
 from .model_service import ModelService
 from .system_config import SystemConfig
 from .caching.local_cache import LocalStorage
+from .weather import WeatherUtils
 import pickle
 logger = logging.getLogger(__name__)
 from .caching.cache import ICacheBackend, CACHE_TTL
@@ -23,6 +25,7 @@ class MemoryLayerCache:
         self.model = cfg["model"]
         self.param_keys = cfg["param_keys"]        # List[dict]
         self.load_offsets()
+        self.weather_utils = WeatherUtils()
         # total_days = cfg.get("total_days", 5)
         # step_hours = cfg.get("step_hours", 3)
         # # Offsets: 0, step_hours, 2*step_hours, ..., total_days*24
@@ -74,7 +77,9 @@ class MemoryLayerCache:
             return;
 
         self.offsets = range1;
-        for i in range(step_hours - 1):
+        step_subtract = step_hours - 1
+        step_range = math.floor((step_hours / 2) - 1 if step_hours > 3 else step_subtract)
+        for i in range(step_range):
             range_values = list(range(i + 1, total_hours + (i + 2), step_hours))
             self.offsets = [*self.offsets, *range_values]
         print(f"I have these layered offsets {self.offsets}")
@@ -181,9 +186,12 @@ class MemoryLayerCache:
                 return None
         return ip
 
+    def apply_extras_details(self, records: list[Any]):
+        self.weather_utils.apply_extras_details(records)
+
     def get_current_slice(self, lat: float, lon: float, off: int):
         dt = self._get_base_time() + timedelta(hours=off)
-        records = []
+        records: list[Any] = []
         print(f"[Fetch] Computing offset={off} hour_key={off}")
         for entry in self.param_keys:
             pk = entry["param_key"]
@@ -191,7 +199,7 @@ class MemoryLayerCache:
             if not ip:
                 continue
             # ip = self._cache_get(key)
-            print(f"I have the ip for {pk} {off}")
+            print(f"Processing value for {pk} {off}")
 
             try:
                 val = float(ip(lat, lon))
@@ -199,6 +207,7 @@ class MemoryLayerCache:
                 print(f"[Fetch] Error {pk}@{off}: {e}")
                 continue
             records.append((pk, {"datetime": dt.isoformat(), "value": val}))
+        # self.apply_extras_details(records)
         return records
 
     def load_slices(self, off: int):
@@ -215,7 +224,6 @@ class MemoryLayerCache:
         self._loading = True
         offsets = [off for off in self.offsets_primary if off >= 0]
         print(f"LOADING THESE OFFSET {offsets}")
-
         length = len(offsets) * len(self.param_keys)
         total_length = 0
         def _compute_for_offset(off: int):
