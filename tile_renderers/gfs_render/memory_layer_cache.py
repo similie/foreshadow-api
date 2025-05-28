@@ -22,19 +22,20 @@ class MemoryLayerCache:
         cfg = SystemConfig().get_default_forecast_json()
         self.model = cfg["model"]
         self.param_keys = cfg["param_keys"]        # List[dict]
-        total_days = cfg.get("total_days", 5)
-        step_hours = cfg.get("step_hours", 3)
-        # Offsets: 0, step_hours, 2*step_hours, ..., total_days*24
-        #
-        total_hours = total_days * 24
-        range1 = list(range(0, total_hours + 1, step_hours))
-        range2 = list(range(1, total_hours + 2, step_hours))
-        if "BIG_MEMORY" in os.environ:
-            self.offsets = list(range(0, total_hours + 1, 1)) # we do every hour
-        else:
-            self.offsets = sorted(set(range1 + range2))
+        self.load_offsets()
+        # total_days = cfg.get("total_days", 5)
+        # step_hours = cfg.get("step_hours", 3)
+        # # Offsets: 0, step_hours, 2*step_hours, ..., total_days*24
+        # #
+        # total_hours = total_days * 24
+        # range1 = list(range(0, total_hours + 1, step_hours))
+        # range2 = list(range(1, total_hours + 2, step_hours))
+        # if "BIG_MEMORY" in os.environ:
+        #     self.offsets = list(range(0, total_hours + 1, 1)) # we do every hour
+        # else:
+        #     self.offsets = sorted(set(range1 + range2))
 
-        self.offsets_primary = sorted(range1)
+        # self.offsets_primary = sorted(range1)
         # self.offsets = list(range(0, total_days * 24 + 1, step_hours))
         print('DOING THESE OFFSETS', self.offsets)
         # Key: (param_key, hour_key) -> interpolator instance
@@ -53,8 +54,29 @@ class MemoryLayerCache:
         # print("[MemoryLayerCache] Preload complete.")
         #
 
+    def load_offsets(self):
+        cfg = SystemConfig().get_default_forecast_json()
+        total_days = cfg.get("total_days", 5)
+        step_hours = cfg.get("step_hours", 3)
+        total_hours = total_days * 24
+        range1 = list(range(0, total_hours + 1, step_hours))
+        self.offsets_primary = sorted(range1)
+
+        if not "BIG_MEMORY" in os.environ:
+            range2 = list(range(1, total_hours + 2, step_hours))
+            self.offsets = sorted(set(range1 + range2))
+
+            return;
+
+        self.offsets = range1;
+        for i in range(step_hours - 1):
+            range_values = list(range(i + 1, total_hours + (i + 2), step_hours))
+            self.offsets = [*self.offsets, *range_values]
+        print(f"I have these layered offsets {self.offsets}")
+
     def is_loading(self):
        return self._loading and self._init_run
+
 
     def preload(self):
 
