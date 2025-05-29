@@ -72,7 +72,7 @@ class MemoryLayerCache:
 
         if not "BIG_MEMORY" in os.environ:
             range2 = list(range(1, total_hours + 2, step_hours))
-            self.offsets = sorted(set(range1 + range2))
+            self.offsets = [*range1, *range2]  # sorted(set(range1 + range2))
 
             return;
 
