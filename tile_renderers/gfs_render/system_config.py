@@ -8,11 +8,6 @@ class SystemConfig:
         data = '''{
             "model": "gfs",
             "param_keys": [{
-                "param_key": "pressure-reduced-to-msl",
-                "level": 0,
-                "typeOfLevel": "meanSea",
-                "stepType": "instant"
-            }, {
                 "param_key": "surface-pressure",
                 "typeOfLevel": "surface",
                 "level": 0,
@@ -32,11 +27,6 @@ class SystemConfig:
                 "param_key": "10-metre-v-wind-component",
                 "typeOfLevel": "heightAboveGround",
                 "level": 10,
-                "stepType": "instant"
-            }, {
-                "param_key": "apparent-temperature",
-                "typeOfLevel": "heightAboveGround",
-                "level": 2,
                 "stepType": "instant"
             }, {
                 "param_key": "2-metre-temperature",
