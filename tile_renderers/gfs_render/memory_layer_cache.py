@@ -59,9 +59,10 @@ class MemoryLayerCache:
         #
 
     def get_worker_count(self):
-        max_cores = 24
+        # max_cores = 24
         cpu_count = os.cpu_count() or 4
-        return cpu_count if cpu_count < max_cores else max_cores if cpu_count > max_cores else 4
+        return cpu_count
+        #return cpu_count if cpu_count < max_cores else max_cores if cpu_count > max_cores else 4
     def load_offsets(self):
         cfg = SystemConfig().get_default_forecast_json()
         total_days = cfg.get("total_days", 5)
