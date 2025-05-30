@@ -352,14 +352,16 @@ class MemoryLayerCache:
             return values
         # self.get_worker_count()
         workers = self.get_worker_count()
+        print(f"WORKERS {workers}")
         with ThreadPoolExecutor(max_workers=workers) as exe:
             futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
             for fut in as_completed(futures):
                 total_length += 1
                 print(f"PRELOAD EXECUTION COMPLETED {total_length} of {length}")
+
         self._loading = False
         self._init_run = False
-
+        print("Preload completed")
     # def preload_to_local(self):
     #     if self._loading:
     #         return
