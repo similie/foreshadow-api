@@ -352,7 +352,6 @@ class MemoryLayerCache:
             return values
         # self.get_worker_count()
         workers = self.get_worker_count()
-        print(f'I AM RUN WITH THSE WORKERS {workers}')
         with ThreadPoolExecutor(max_workers=workers) as exe:
             futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
             for fut in as_completed(futures):

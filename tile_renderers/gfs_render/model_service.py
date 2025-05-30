@@ -1071,7 +1071,7 @@ class ModelService:
                 logger.error(f"Error unpickling cache key {key}: {e}")
         return None
 
-    def _cache_set(self, key: str, value: Any, expire: int = CACHE_TTL) -> None:
+    def _cache_set(self, key: str, value: Any, expire: int = CACHE_TTL * 3) -> None:
         try:
             self.cache.set(key, pickle.dumps(value, protocol=4), expire=expire)
         except Exception as e:
