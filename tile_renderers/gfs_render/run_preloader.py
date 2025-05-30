@@ -20,7 +20,8 @@ model_service = ModelService(backend_cache)
 
 layer_cache = MemoryLayerCache(
     model_service,
-    backend_cache
+    backend_cache,
+    True
 )
 
 async def _prewarm_loop(
@@ -34,7 +35,7 @@ async def _prewarm_loop(
             # layer_cache.loadOffset();
             await loop.run_in_executor(
                 None,
-                lambda:layer_cache.preload_slices(True)
+                lambda:layer_cache.preload_slices()
             )
         except Exception as exc:
             logger.error(f"Pre-warm failed {exc}")
