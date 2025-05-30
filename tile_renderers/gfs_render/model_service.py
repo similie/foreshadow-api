@@ -686,7 +686,9 @@ class ModelService:
         if now.minute >= 30:
             now += timedelta(hours=1)
         adjusted_time = now + timedelta(hours=offset)
-        return f"{adjusted_time.day:02}:{adjusted_time.hour:02}"
+        key = f"{adjusted_time.day:02}:{adjusted_time.hour:02}"
+        print(f"I AM THE KEY FOR THIS HOUR {key} {offset}")
+        return key
 
     def create_tile_cache_key(
         self,
