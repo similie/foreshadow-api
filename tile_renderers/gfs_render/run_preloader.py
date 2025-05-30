@@ -34,7 +34,7 @@ async def _prewarm_loop(
             # layer_cache.loadOffset();
             await loop.run_in_executor(
                 None,
-                lambda:layer_cache.preload()
+                lambda:layer_cache.preload_slices(True)
             )
         except Exception as exc:
             logger.error(f"Pre-warm failed {exc}")

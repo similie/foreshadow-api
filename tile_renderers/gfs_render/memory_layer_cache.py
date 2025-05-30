@@ -24,24 +24,10 @@ class MemoryLayerCache:
         cfg = SystemConfig().get_default_forecast_json()
         self.model = cfg["model"]
         self.param_keys = cfg["param_keys"]        # List[dict]
+        self.preload_state = "BIG_MEMORY" in os.environ
         self.load_offsets()
         self.weather_utils = WeatherUtils()
-        # total_days = cfg.get("total_days", 5)
-        # step_hours = cfg.get("step_hours", 3)
-        # # Offsets: 0, step_hours, 2*step_hours, ..., total_days*24
-        # #
-        # total_hours = total_days * 24
-        # range1 = list(range(0, total_hours + 1, step_hours))
-        # range2 = list(range(1, total_hours + 2, step_hours))
-        # if "BIG_MEMORY" in os.environ:
-        #     self.offsets = list(range(0, total_hours + 1, 1)) # we do every hour
-        # else:
-        #     self.offsets = sorted(set(range1 + range2))
-
-        # self.offsets_primary = sorted(range1)
-        # self.offsets = list(range(0, total_days * 24 + 1, step_hours))
-        print('DOING THESE OFFSETS', self.offsets)
-        # Key: (param_key, hour_key) -> interpolator instance
+        print('LOADING OFFSET VALUES', self.offsets)
         self._cache: Dict[str, Any] = {}
         self._lock = threading.Lock()
         self._loading = False
@@ -50,13 +36,7 @@ class MemoryLayerCache:
         self._localStorage = LocalStorage()
         self._ttl = CACHE_TTL
         self._ttl_3 = self._ttl * 3
-        # Preload all layers in parallel
-        # workers = os.cpu_count() or 4
-        # print(f"[MemoryLayerCache] Preloading {len(self.offsets)} offsets × {len(self.param_keys)} params using {workers} workers")
-        # with ThreadPoolExecutor(max_workers=workers) as executor:
-        #     executor.map(self._preload_offset, self.offsets)
-        # print("[MemoryLayerCache] Preload complete.")
-        #
+
 
     def get_worker_count(self):
         # max_cores = 24
@@ -65,23 +45,23 @@ class MemoryLayerCache:
         #return cpu_count if cpu_count < max_cores else max_cores if cpu_count > max_cores else 4
     def load_offsets(self):
         cfg = SystemConfig().get_default_forecast_json()
-        total_days = cfg.get("total_days", 5)
-        step_hours = cfg.get("step_hours", 3)
-        total_hours = total_days * 24
-        range1 = list(range(0, total_hours + 1, step_hours))
+        self.total_days = cfg.get("total_days", 5)
+        self.step_hours = cfg.get("step_hours", 3)
+        self.total_hours = self.total_days * 24
+        range1 = list(range(0, self.total_hours + 1, self.step_hours))
         self.offsets_primary = sorted(range1)
 
-        if not "BIG_MEMORY" in os.environ:
-            range2 = list(range(1, total_hours + 2, step_hours))
+        if not  self.preload_state:
+            range2 = list(range(1, self.total_hours + 2, self.step_hours))
             self.offsets = [*range1, *range2]  # sorted(set(range1 + range2))
 
             return;
 
         self.offsets = range1;
-        step_subtract = step_hours - 1
-        step_range = math.floor((step_hours / 2) - 1 if step_hours > 3 else step_subtract)
+        step_subtract = self.step_hours - 1
+        step_range = math.floor((self.step_hours / 2) - 1 if self.step_hours > 3 else step_subtract)
         for i in range(step_range):
-            range_values = list(range(i + 1, total_hours + (i + 2), step_hours))
+            range_values = list(range(i + 1, self.total_hours + (i + 2), self.step_hours))
             self.offsets = [*self.offsets, *range_values]
         print(f"I have these layered offsets {self.offsets}")
 
@@ -95,9 +75,9 @@ class MemoryLayerCache:
             return
 
         self._loading = True
-        workers = os.cpu_count() or 4
+        workers = self.get_worker_count()
         print(f"[MemoryLayerCache] Preloading {len(self.offsets)} offsets × {len(self.param_keys)} params using {workers} workers")
-        with ThreadPoolExecutor(max_workers=self.get_worker_count()) as executor:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
             executor.map(self._preload_offset, self.offsets)
 
         self._loading = False
@@ -162,13 +142,13 @@ class MemoryLayerCache:
         if self._localStorage.available(key):
             self._localStorage.extend(key, self._ttl);
             return self._localStorage.get(key)
-        ip = self._cache_get(key)
-        if ip:
-            # with self._lock:
-            #     self._cache[key] = ip
-            self._localStorage.set(key, ip)
-            self._cacheStore.extend(key, self._ttl_3);
-        return ip
+        # ip = self._cache_get(key)
+        # if ip:
+        #     # with self._lock:
+        #     #     self._cache[key] = ip
+        #     self._localStorage.set(key, ip)
+            # self._cacheStore.extend(key, self._ttl_3);
+        return None
 
     def _get_base_time(self):
         now = datetime.utcnow()
@@ -190,109 +170,255 @@ class MemoryLayerCache:
     def apply_extras_details(self, records: list[Any]):
         self.weather_utils.apply_extras_details(records)
 
-    def get_current_slice(self, lat: float, lon: float, off: int):
-        dt = self._get_base_time() + timedelta(hours=off)
-        records: list[Any] = []
-        print(f"[Fetch] Computing offset={off} hour_key={off}")
-        for entry in self.param_keys:
-            pk = entry["param_key"]
-            ip = self._get_ip_with_fallback(pk, off)
-            if not ip:
-                continue
-            # ip = self._cache_get(key)
-            print(f"Processing value for {pk} {off}")
+    # def get_current_slice(self, lat: float, lon: float, off: int):
+    #     dt = self._get_base_time() + timedelta(hours=off)
+    #     records: list[Any] = []
+    #     print(f"[Fetch] Computing offset={off} hour_key={off}")
+    #     for entry in self.param_keys:
+    #         pk = entry["param_key"]
+    #         ip = self._get_ip_with_fallback(pk, off)
+    #         if not ip:
+    #             continue
+    #         # ip = self._cache_get(key)
+    #         print(f"Processing value for {pk} {off}")
 
+    #         try:
+    #             val = float(ip(lat, lon))
+    #         except Exception as e:
+    #             print(f"[Fetch] Error {pk}@{off}: {e}")
+    #             continue
+    #         records.append((pk, {"datetime": dt.isoformat(), "value": val}))
+    #     # self.apply_extras_details(records)
+    #     return records
+
+    # def load_slices(self, off: int):
+    #     print(f"[Fetch] Computing offset={off} hour_key={off}")
+    #     for entry in self.param_keys:
+    #         pk = entry["param_key"]
+    #         self._get_ip_with_fallback(pk, off)
+    #         return (pk,off)
+    #
+    def find_current_slice(self, lat: float, lon: float, hour_offset: int):
+        values = []
+        if hour_offset > self.total_hours:
+            return None
+
+        def _compute_for_offset(key_value: Any):
+            sendResults = {}
             try:
-                val = float(ip(lat, lon))
+                key_name: str = key_value.get("param_key")
+                # for off in offsets:
+                key = self._get_cache_key(key_name, hour_offset)
+                # print(f'VERIFYING MY KEY {key} {self._localStorage.available(key)}')
+                if not self._localStorage.available(key):
+                    return None
+
+                self._localStorage.extend(key, self._ttl)
+                result = self._localStorage.get(key)
+
+                if not result:
+                    return None
+
+                data_array, lat_array, lon_array, meta_dict = result
+                if not 'units' in sendResults:
+                    sendResults["unit"] = meta_dict.get("parameterUnits", "unknown")
+                if not 'metadata' in sendResults:
+                    sendResults["metadata"] = meta_dict
+                val = self.model_service.interpolate_value(data_array, lat_array, lon_array, lat, lon)
+                sendResults["value"] = val
+                sendResults["datetime"] = self.model_service._build_valid_datetime_from_metadata(meta_dict, hour_offset).isoformat()
+                return sendResults
             except Exception as e:
-                print(f"[Fetch] Error {pk}@{off}: {e}")
-                continue
-            records.append((pk, {"datetime": dt.isoformat(), "value": val}))
-        # self.apply_extras_details(records)
-        return records
+                print(f"ERROR {e}")
 
-    def load_slices(self, off: int):
-        print(f"[Fetch] Computing offset={off} hour_key={off}")
-        for entry in self.param_keys:
-            pk = entry["param_key"]
-            self._get_ip_with_fallback(pk, off)
-            return (pk,off)
 
-    def preload_to_local(self):
+        # self.get_worker_count()
+        with ThreadPoolExecutor(max_workers=self.get_worker_count()) as exe:
+            futures = {exe.submit(_compute_for_offset, key): key for key in self.param_keys}
+            # items = {}
+            for fut in as_completed(futures):
+                result = fut.result()
+                if not result:
+                    continue
+                values.append(result)
+        return values
+
+
+
+    def find_slice(self, lat: float, lon: float, start_hour_offset = 0):
+        values = []
+        offsets = [off for off in self.offsets_primary if off >= 0]
+        if not start_hour_offset in offsets:
+            return values
+        def _compute_for_offset(key_value: Any):
+            sendResults = {"values" : []}
+            try:
+                key_name: str = key_value.get("param_key")
+                for off in offsets:
+                    key = self._get_cache_key(key_name, off)
+                    # print(f'VERIFYING MY KEY {key} {self._localStorage.available(key)}')
+                    if not self._localStorage.available(key):
+                        continue
+
+                    self._localStorage.extend(key, self._ttl)
+                    result = self._localStorage.get(key)
+
+                    if not result:
+                        continue
+
+                    data_array, lat_array, lon_array, meta_dict = result
+                    if not 'units' in sendResults:
+                        sendResults["unit"] = meta_dict.get("parameterUnits", "unknown")
+                    if not 'metadata' in sendResults:
+                        sendResults["metadata"] = meta_dict
+                    val = self.model_service.interpolate_value(data_array, lat_array, lon_array, lat, lon)
+                    sendResults["values"].append({
+                        "value": val,
+                        "datetime": self.model_service._build_valid_datetime_from_metadata(meta_dict, off).isoformat()
+                    })
+                return sendResults
+            except Exception as e:
+                print(f"ERROR {e}")
+
+
+        # self.get_worker_count()
+        with ThreadPoolExecutor(max_workers=self.get_worker_count()) as exe:
+            futures = {exe.submit(_compute_for_offset, key): key for key in self.param_keys}
+            # items = {}
+            for fut in as_completed(futures):
+                result = fut.result()
+                if not result:
+                    continue
+                values.append(result)
+        return values
+
+
+    def preload_slices(self, cache_only: bool = False):
         if self._loading:
             return
 
         self._loading = True
-        offsets = [off for off in self.offsets_primary if off >= 0]
-        print(f"LOADING THESE OFFSET {offsets}")
-        length = len(offsets) * len(self.param_keys)
+        cache_key = self.model_service._get_grib_dict_values_key(self.model, 0)
+        values = self.model_service._cache_get(cache_key) or {}
+        pm = self.model_service.build_param_map_for_offset(self.model)
+        loaded_offsets = self.offsets if  self.preload_state  else self.offsets_primary
+        offsets = [off for off in loaded_offsets if off >= 0]
+        length = len(offsets)
+
         total_length = 0
         def _compute_for_offset(off: int):
-            # hour_key = self.model_service.todays_hour_with_date(off)
-            # dt = base_time + timedelta(hours=off)
+            grbs = self.model_service._get_raw_grib(self.model, off)
             try:
-                return self.load_slices(off)
+                for param_key in self.param_keys:
+                    key_name = param_key.get("param_key")
+                    key = self._get_cache_key(key_name, off)
+                    if self._localStorage.available(key):
+                        self._localStorage.extend(key, self._ttl)
+                        values[param_key.get("key", key_name)] = self._localStorage.get(key)
+                        continue
+                    param_name = pm.get(key_name)
+                    if not param_name:
+                        logger.warning(f"No parameter name for {param_name}")
+                        continue
+                    result = self.model_service._set_cached_grib_values(
+                        grbs,
+                        param_name,
+                        self.model,
+                        off,
+                        param_key.get("level"),
+                        param_key.get("typeOfLevel"),
+                        param_key.get("stepType")
+                    )
+                    values[param_key.get("key", key_name)] = result
+                    if not cache_only:
+                        self._localStorage.set(key, result, self._ttl)
+                # return self.load_slices(off)
             except Exception as e:
                 print(f"ERROR {e}")
 
+            return values
+        # self.get_worker_count()
         with ThreadPoolExecutor(max_workers=self.get_worker_count()) as exe:
             futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
             for fut in as_completed(futures):
                 total_length += 1
-                print(f"COMPLETED {fut.result()} {total_length} of {length} ")
-
+                print(f"PRELOAD EXECUTION COMPLETED {total_length} of {length}")
         self._loading = False
         self._init_run = False
 
+    # def preload_to_local(self):
+    #     if self._loading:
+    #         return
 
-    def get_slices(
-        self,
-        lat: float,
-        lon: float,
-        start_offset: int = 0
-    ) -> List[Dict[str, Any]]:
-        """
-        Returns a full multi-offset forecast timeseries for given geopoint.
+    #     self._loading = True
+    #     offsets = [off for off in self.offsets_primary if off >= 0]
+    #     print(f"LOADING THESE OFFSET {offsets}")
+    #     length = len(offsets) * len(self.param_keys)
+    #     total_length = 0
+    #     def _compute_for_offset(off: int):
+    #         try:
+    #             return self.load_slices(off)
+    #         except Exception as e:
+    #             print(f"ERROR {e}")
 
-        Each param_key is returned with an ordered list of (datetime, value) pairs.
-        """
-        # Determine base timestamp (rounded up at 30min)
-        # now = datetime.utcnow()
-        # if now.minute >= 30:
-        #     now += timedelta(hours=1)
-        # base_time = now.replace(minute=0, second=0, microsecond=0)
-        # Filter offsets at or after start_offset
-        offsets = [off for off in self.offsets_primary if off >= start_offset]
-        print(f"[Fetch] Generating timeseries from offsets {offsets}")
+    #     with ThreadPoolExecutor(max_workers=self.get_worker_count()) as exe:
+    #         futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
+    #         for fut in as_completed(futures):
+    #             total_length += 1
+    #             print(f"COMPLETED {fut.result()} {total_length} of {length} ")
 
-        # Helper to compute one offset's slice
-        def _compute_for_offset(off: int):
-            # hour_key = self.model_service.todays_hour_with_date(off)
-            # dt = base_time + timedelta(hours=off)
-            return self.get_current_slice(lat, lon, off)
+    #     self._loading = False
+    #     self._init_run = False
 
-        # Parallel fetch
-        final: Dict[str, List[Dict[str, Any]]] = {entry["param_key"]: [] for entry in self.param_keys}
-        with ThreadPoolExecutor(max_workers=self.get_worker_count()) as exe:
-            futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
-            for fut in as_completed(futures):
-                off = futures[fut]
-                try:
-                    recs = fut.result()
-                except Exception as e:
-                    print(f"[Fetch] Offset {off} failed: {e}")
-                    continue
-                # Append in temporal order
-                for pk, rec in recs:
-                    final[pk].append(rec)
 
-        # Build list of param timeseries, sorted by time
-        result = []
-        for pk, values in final.items():
-            # ensure sorted (should be by offset order)
-            values.sort(key=lambda x: x["datetime"])
-            result.append({"param_key": pk, "values": values})
-        return result
+    # def get_slices(
+    #     self,
+    #     lat: float,
+    #     lon: float,
+    #     start_offset: int = 0
+    # ) -> List[Dict[str, Any]]:
+    #     """
+    #     Returns a full multi-offset forecast timeseries for given geopoint.
+
+    #     Each param_key is returned with an ordered list of (datetime, value) pairs.
+    #     """
+    #     # Determine base timestamp (rounded up at 30min)
+    #     # now = datetime.utcnow()
+    #     # if now.minute >= 30:
+    #     #     now += timedelta(hours=1)
+    #     # base_time = now.replace(minute=0, second=0, microsecond=0)
+    #     # Filter offsets at or after start_offset
+    #     offsets = [off for off in self.offsets_primary if off >= start_offset]
+    #     print(f"[Fetch] Generating timeseries from offsets {offsets}")
+
+    #     # Helper to compute one offset's slice
+    #     def _compute_for_offset(off: int):
+    #         # hour_key = self.model_service.todays_hour_with_date(off)
+    #         # dt = base_time + timedelta(hours=off)
+    #         return self.get_current_slice(lat, lon, off)
+
+    #     # Parallel fetch
+    #     final: Dict[str, List[Dict[str, Any]]] = {entry["param_key"]: [] for entry in self.param_keys}
+    #     with ThreadPoolExecutor(max_workers=self.get_worker_count()) as exe:
+    #         futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
+    #         for fut in as_completed(futures):
+    #             off = futures[fut]
+    #             try:
+    #                 recs = fut.result()
+    #             except Exception as e:
+    #                 print(f"[Fetch] Offset {off} failed: {e}")
+    #                 continue
+    #             # Append in temporal order
+    #             for pk, rec in recs:
+    #                 final[pk].append(rec)
+
+    #     # Build list of param timeseries, sorted by time
+    #     result = []
+    #     for pk, values in final.items():
+    #         # ensure sorted (should be by offset order)
+    #         values.sort(key=lambda x: x["datetime"])
+    #         result.append({"param_key": pk, "values": values})
+    #     return result
 
 
 

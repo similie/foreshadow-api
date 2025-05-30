@@ -984,7 +984,6 @@ class ModelService:
         step_type: Optional[str] = None
     ):
         cache_key = self._get_grib_array_values_key(param_name, model, hour_offset, level, type_of_level, step_type)
-        print("I AM A CHACHED KEY FOR THIS", cache_key)
         def compute():
             try:
                 g = self._select_grib_message(grbs, param_name , level, type_of_level, step_type)

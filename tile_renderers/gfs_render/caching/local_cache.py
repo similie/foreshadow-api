@@ -63,11 +63,10 @@ class LocalStorage(ICacheBackend):
                     self.delete(key)
 
     def _set_key_to_now(self, key: str, expire: int = CACHE_TTL):
-        with self._lock:
-            self.data_time[key] = {
-                'created_at': datetime.now(),
-                'ttl': expire
-            }
+        self.data_time[key] = {
+            'created_at': datetime.now(),
+            'ttl': expire
+        }
 
     def extend(self, key: str, expire: int = 0):
         with self._lock:

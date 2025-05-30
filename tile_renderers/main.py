@@ -254,7 +254,7 @@ def forecast_point(lat: float, lon: float, hour_offset: int = 0):
     if layer_cache.is_loading():
         raise HTTPException(status_code=404, detail="Data is not ready for output.")
     try:
-        result = layer_cache.get_current_slice(lat, lon, hour_offset)
+        result = layer_cache.find_current_slice(lat, lon, hour_offset)
         if not result:
             raise HTTPException(status_code=404, detail="No data for that offset.")
         return JSONResponse(content=result)
@@ -266,7 +266,7 @@ def forecast(lat: float, lon: float, hour_offset: int = 0):
     if layer_cache.is_loading():
         raise HTTPException(status_code=404, detail="Data is not ready for output.")
     try:
-        result = layer_cache.get_slices(lat, lon, hour_offset)
+        result = layer_cache.find_slice(lat, lon, 0)
         if not result:
             raise HTTPException(status_code=404, detail="No data for that offset.")
         return JSONResponse(content=result)
@@ -352,47 +352,6 @@ async def forecast_route(request: Request):
 #———————————————————————————————
 # 1) the “pre-warm” worker
 #———————————————————————————————
-async def _prewarm_loop_bak(
-    models: Sequence[str],
-    param_keys:Union[str, List[Union[str, Dict[str, Any]]]],
-    interval_s: float = 60.0,
-    total_days: int = 5,
-    step_hours: int = 3,
-    start_hour_offset: int = 0,
-):
-    loop = asyncio.get_event_loop()
-    while True:
-        # pick random lat/lon in valid ranges
-        lat = random.uniform(-90.0, 90.0)
-        lon = random.uniform(-180.0, 180.0)
-        model = random.choice(models)
-        print("Warming my shit", lat, lon, model)
-        try:
-            # run the blocking call off the event loop
-            timeseries = await loop.run_in_executor(
-                None,
-                lambda: model_service.get_point_forecast_timeseries(
-                    model=model,
-                    param_keys=param_keys,
-                    lat=lat,
-                    lon=lon,
-                    start_hour_offset=start_hour_offset,
-                    total_days=total_days,
-                    step_hours=step_hours,
-                )
-            )
-            print(timeseries)
-            # if timeseries:
-            #     # serialize and stash in Redis (adjust key‐format however you like)
-            #     cache_key = f"prewarm:{model}:{lat:.4f},{lon:.4f}:{start_hour_offset}:{total_days}d:{step_hours}h"
-            #     backend_cache.set(cache_key, json.dumps(timeseries), expire=3600)
-            #     logger.info(f"Pre-warmed cache key={cache_key}")
-        except Exception as exc:
-            logger.error(f"Pre-warm failed for {model}@{lat},{lon}: {exc}")
-        # wait before next one
-        await asyncio.sleep(interval_s)
-
-
 async def _prewarm_loop(
     interval_s: float = 60.0,
 ):
@@ -404,13 +363,8 @@ async def _prewarm_loop(
             # layer_cache.loadOffset();
             await loop.run_in_executor(
                 None,
-                lambda: layer_cache.preload_to_local()
+                lambda: layer_cache.preload_slices() #layer_cache.preload_to_local()
             )
-            # if timeseries:
-            #     # serialize and stash in Redis (adjust key‐format however you like)
-            #     cache_key = f"prewarm:{model}:{lat:.4f},{lon:.4f}:{start_hour_offset}:{total_days}d:{step_hours}h"
-            #     backend_cache.set(cache_key, json.dumps(timeseries), expire=3600)
-            #     logger.info(f"Pre-warmed cache key={cache_key}")
         except Exception as exc:
             logger.error(f"Pre-warm failed {exc}")
         # wait before next one
