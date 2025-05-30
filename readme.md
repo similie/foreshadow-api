@@ -59,7 +59,7 @@ We have test with [GDAL](https://gdal.org/en/stable/development/building_from_so
 - cmake
 
 ## Memory Requirements
-Ensure sufficient memory is allocated for the API server to handle concurrent requests effectively. To preload the data for radid forecasts, we recommend a server with at least 256GB of RAM. The dataset is 4 dimensional and requires significant resources to run.
+Ensure sufficient memory is allocated for the API server to handle concurrent requests effectively. To preload the data for radid forecasts, we recommend a server with at least 64GB or RAM and recommend 256GB for medium volume traffic. The dataset is 4 dimensional and requires significant resources to run.
 
 ```bash
 uvicorn main:app --host 0.0.0.0 --port 5001 --workers $(nproc)

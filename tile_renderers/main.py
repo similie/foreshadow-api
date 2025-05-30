@@ -266,7 +266,7 @@ def forecast(lat: float, lon: float, hour_offset: int = 0):
     if layer_cache.is_loading():
         raise HTTPException(status_code=404, detail="Data is not ready for output.")
     try:
-        result = layer_cache.find_slice(lat, lon, 0)
+        result = layer_cache.find_slice(lat, lon, hour_offset)
         if not result:
             raise HTTPException(status_code=404, detail="No data for that offset.")
         return JSONResponse(content=result)

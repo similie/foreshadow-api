@@ -200,15 +200,14 @@ class MemoryLayerCache:
     #
     def find_current_slice(self, lat: float, lon: float, hour_offset: int):
         values = []
-        if hour_offset > self.total_hours:
-            return None
+        offset = self._find_closest_offset(hour_offset)
 
         def _compute_for_offset(key_value: Any):
             sendResults = {}
             try:
                 key_name: str = key_value.get("param_key")
                 # for off in offsets:
-                key = self._get_cache_key(key_name, hour_offset)
+                key = self._get_cache_key(key_name, offset)
                 # print(f'VERIFYING MY KEY {key} {self._localStorage.available(key)}')
                 if not self._localStorage.available(key):
                     return None
@@ -226,7 +225,7 @@ class MemoryLayerCache:
                     sendResults["metadata"] = meta_dict
                 val = self.model_service.interpolate_value(data_array, lat_array, lon_array, lat, lon)
                 sendResults["value"] = val
-                sendResults["datetime"] = self.model_service._build_valid_datetime_from_metadata(meta_dict, hour_offset).isoformat()
+                sendResults["datetime"] = self.model_service._build_valid_datetime_from_metadata(meta_dict, offset).isoformat()
                 return sendResults
             except Exception as e:
                 print(f"ERROR {e}")
@@ -243,13 +242,21 @@ class MemoryLayerCache:
                 values.append(result)
         return values
 
+    def _find_closest_offset(self, offset: int):
+        if offset <= 0:
+            return 0
+        offsets = [off for off in self.offsets_primary if off >= 0]
+        if offset in offsets:
+            return offset
 
+        closest_offset = min(offsets, key=lambda x: abs(x - offset))
+        return closest_offset
 
     def find_slice(self, lat: float, lon: float, start_hour_offset = 0):
         values = []
+        offset = self._find_closest_offset(start_hour_offset)
         offsets = [off for off in self.offsets_primary if off >= 0]
-        if not start_hour_offset in offsets:
-            return values
+        offsets = offsets[offsets.index(offset):]
         def _compute_for_offset(key_value: Any):
             sendResults = {"values" : []}
             try:

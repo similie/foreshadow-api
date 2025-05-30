@@ -57,7 +57,7 @@ class LocalStorage(ICacheBackend):
                 for key, details in list(self.data_time.items()):
                     if self._is_expired(key):
                         keys_to_delete.append(key)
-                print(f"Expired keys: {keys_to_delete}")
+                # print(f"Expired keys: {keys_to_delete}")
                 # Delete the expired keys
                 for key in keys_to_delete:
                     self.delete(key)
