@@ -240,7 +240,10 @@ class MemoryLayerCache:
                 if not result:
                     continue
                 values.append(result)
-        return values
+        return sorted(
+            values,
+            key=lambda item: item["metadata"]["key"]
+        )
 
     def _find_closest_offset(self, offset: int):
         if offset <= 0:
@@ -346,10 +349,7 @@ class MemoryLayerCache:
             except Exception as e:
                 print(f"ERROR {e}")
 
-            return sorted(
-                values,
-                key=lambda item: item["metadata"]["key"]
-            )
+            return values
         # self.get_worker_count()
         workers = self.get_worker_count()
         print(f'I AM RUN WITH THSE WORKERS {workers}')
