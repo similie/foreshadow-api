@@ -427,7 +427,7 @@ class ModelService:
         if step_type is not None:
             search["stepType"] = step_type
 
-        # print("GRIB SEARCH CRITERIA", search)
+        print("GRIB SEARCH CRITERIA", search)
         # if level is not None and type_of_level is not None:
         try:
             sel = grbs.select(**search)
@@ -530,7 +530,7 @@ class ModelService:
             try:
                 found = grbs.select(**select)
                 if found:
-                    logger.info(f"Found surface data (level=0) for param={param_name}")
+                    logger.info(f"Found surface data (level={i}) for param={param_name}")
                     return found[0]
                 continue
             except:
@@ -1005,7 +1005,7 @@ class ModelService:
             except Exception as e:
                 logger.error(f"Error building interpolator: {e}", exc_info=True)
                 return None
-        return self._get_or_compute(cache_key, compute)
+        return self._get_or_compute(cache_key, compute, CACHE_TTL * 3)
 
 
     def _get_raw_grib(self, model: str, hour_offset: int,
@@ -1071,7 +1071,7 @@ class ModelService:
                 logger.error(f"Error unpickling cache key {key}: {e}")
         return None
 
-    def _cache_set(self, key: str, value: Any, expire: int = CACHE_TTL * 3) -> None:
+    def _cache_set(self, key: str, value: Any, expire: int = CACHE_TTL) -> None:
         try:
             self.cache.set(key, pickle.dumps(value, protocol=4), expire=expire)
         except Exception as e:
