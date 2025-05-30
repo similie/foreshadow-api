@@ -44,4 +44,5 @@ async def _prewarm_loop(
         await asyncio.sleep(interval_s)
 
 if __name__ == "__main__":
+    print("Starting Preloader")
     asyncio.run(_prewarm_loop(600.0))
