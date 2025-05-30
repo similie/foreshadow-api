@@ -528,9 +528,10 @@ class ModelService:
 
         for i in range(2):
             try:
+                print(f"Searching in range {i} {select}")
                 found = grbs.select(**select)
                 if found:
-                    logger.info(f"Found surface data (level={i}) for param={param_name}")
+                    logger.info(f"Found surface data (level={i}) for param={param_name} ")
                     return found[0]
                 continue
             except:

@@ -51,11 +51,9 @@ class MemoryLayerCache:
         range1 = list(range(0, self.total_hours + 1, self.step_hours))
         self.offsets_primary = sorted(range1)
 
-        # if not self.preload_state:
-        if True:
+        if not self.preload_state:
             range2 = list(range(1, self.total_hours + 2, self.step_hours))
             self.offsets = [*range1, *range2]  # sorted(set(range1 + range2))
-
             return;
 
         self.offsets = range1;
