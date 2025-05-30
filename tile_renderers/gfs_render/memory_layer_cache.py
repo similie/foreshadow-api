@@ -69,20 +69,20 @@ class MemoryLayerCache:
        return self._loading and self._init_run
 
 
-    def preload(self):
+    # def preload(self):
 
-        if self._loading:
-            return
+    #     if self._loading:
+    #         return
 
-        self._loading = True
-        workers = self.get_worker_count()
-        print(f"[MemoryLayerCache] Preloading {len(self.offsets)} offsets × {len(self.param_keys)} params using {workers} workers")
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            executor.map(self._preload_offset, self.offsets)
+    #     self._loading = True
+    #     workers = self.get_worker_count()
+    #     print(f"[MemoryLayerCache] Preloading {len(self.offsets)} offsets × {len(self.param_keys)} params using {workers} workers")
+    #     with ThreadPoolExecutor(max_workers=workers) as executor:
+    #         executor.map(self._preload_offset, self.offsets)
 
-        self._loading = False
-        self._init_run = False
-        print("[MemoryLayerCache] Preload complete.")
+    #     self._loading = False
+    #     self._init_run = False
+    #     print("[MemoryLayerCache] Preload complete.")
 
     def _cache_get(self, key: str) -> Optional[Any]:
         cached = self._cacheStore.get(key)
@@ -297,7 +297,10 @@ class MemoryLayerCache:
                 if not result:
                     continue
                 values.append(result)
-        return values
+        return sorted(
+            values,
+            key=lambda item: item["metadata"]["key"]
+        )
 
 
     def preload_slices(self):
@@ -343,9 +346,14 @@ class MemoryLayerCache:
             except Exception as e:
                 print(f"ERROR {e}")
 
-            return values
+            return sorted(
+                values,
+                key=lambda item: item["metadata"]["key"]
+            )
         # self.get_worker_count()
-        with ThreadPoolExecutor(max_workers=self.get_worker_count()) as exe:
+        workers = self.get_worker_count()
+        print(f'I AM RUN WITH THSE WORKERS {workers}')
+        with ThreadPoolExecutor(max_workers=workers) as exe:
             futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
             for fut in as_completed(futures):
                 total_length += 1
