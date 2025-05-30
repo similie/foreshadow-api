@@ -51,7 +51,8 @@ class MemoryLayerCache:
         range1 = list(range(0, self.total_hours + 1, self.step_hours))
         self.offsets_primary = sorted(range1)
 
-        if not  self.preload_state:
+        # if not self.preload_state:
+        if True:
             range2 = list(range(1, self.total_hours + 2, self.step_hours))
             self.offsets = [*range1, *range2]  # sorted(set(range1 + range2))
 
@@ -314,6 +315,7 @@ class MemoryLayerCache:
         cache_key = self.model_service._get_grib_dict_values_key(self.model, 0)
         values = self.model_service._cache_get(cache_key) or {}
         pm = self.model_service.build_param_map_for_offset(self.model)
+        print("PARAM MAP", pm)
         loaded_offsets = self.offsets if  self.preload_state  else self.offsets_primary
         offsets = [off for off in loaded_offsets if off >= 0]
         length = len(offsets)
