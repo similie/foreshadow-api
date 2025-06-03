@@ -276,8 +276,6 @@ class ModelService:
         fullpath = os.path.join(folder, fname)
         if os.path.exists(fullpath):
             return fullpath
-
-        print("WHAT IS THIS", fullpath)
         return None
     # -------------------------------------------------------------------------
     # Building Param Map
@@ -1173,8 +1171,9 @@ class ModelService:
 
     def _get_raw_grib(self, model: str, hour_offset: int, search: Optional[Dict[str, str]] = None) -> Optional[List[bytes]]: # Optional[List[Any]] :
         fp = self.get_grib_file(model, hour_offset)
-        if not fp:
-            logger.warning(f"No GRIB file for {model} offset {hour_offset}")
+
+        if fp is None:
+            logger.warning(f"No GRIB file for {model} offset {hour_offset} {fp}")
             return None
 
         if search is not None:
