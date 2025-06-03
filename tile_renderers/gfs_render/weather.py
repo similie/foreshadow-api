@@ -12,7 +12,8 @@ class WeatherUtils:
         # ensure within [0,360)
         return dir_deg % 360.0
 
-    def apply_extras_details(self, records: List[Dict[str, Any]]) -> None:
+    def apply_extras_details(self, records: List[Dict[str, Any]], lat: float,
+    lon: float) -> None:
             """
             Given a list of parameter timeseries records, extract the
             10-metre-u and 10-metre-v wind components, compute wind direction,
@@ -26,7 +27,19 @@ class WeatherUtils:
             except StopIteration:
                 # If either component is missing, nothing to do
                 return
-
+            unit = "degrees"
+            metadata = {
+                "parameterName": "10 Meter Wind Direction",
+                "parameterUnits": unit,
+                "shortName": "wd",
+                "typeOfLevel": "heightAboveGround",
+                "level": 10,
+                "min": 0,
+                "max": 360,
+                "name": "10 metre derrived wind direction",
+                "stepType": "instant",
+                "key": "10-metre-wind-direction"
+            }
             # Build quick lookup by datetime
             u_map = {item["datetime"]: item["value"] for item in u_series}
             v_map = {item["datetime"]: item["value"] for item in v_series}
@@ -45,6 +58,6 @@ class WeatherUtils:
 
             # Append the new timeseries
             records.append({
-                "param_key": "10-metre-wind-direction",
+                "metadata": metadata,
                 "values": direction_values
             })

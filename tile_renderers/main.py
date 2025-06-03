@@ -271,6 +271,7 @@ def forecast(lat: float, lon: float, hour_offset: int = 0):
             raise HTTPException(status_code=404, detail="No data for that offset.")
         return JSONResponse(content=result)
     except Exception as e:
+        logger.error(f"Error in preconfigured forecast: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 # @app.get("/forecast")
 # def predefined_forecast(lat: float, lon: float , hour_offset: int = 0):
@@ -333,6 +334,7 @@ async def forecast_route(request: Request):
     level_arg = data.get("level")
     user_tof = data.get("typeOfLevel")
     step_type = data.get("stepType")
+
     timeseries = model_service.get_point_forecast_timeseries(
         model=model,
         param_keys=param_keys,
@@ -355,29 +357,38 @@ async def forecast_route(request: Request):
 async def _prewarm_loop(
     interval_s: float = 60.0,
 ):
-    loop = asyncio.get_event_loop()
-    while True:
-        # pick random lat/lon in valid ranges
-        print("PRELOAD EXECUTION STARTED")
-        try:
-            # layer_cache.loadOffset();
-            await loop.run_in_executor(
-                None,
-                lambda: layer_cache.preload_slices() #layer_cache.preload_to_local()
-            )
-        except Exception as exc:
-            logger.error(f"Pre-warm failed {exc}")
-        # wait before next one
-        #
-        print("PRELOAD EXECUTION COMPLETE")
-        await asyncio.sleep(interval_s)
+    try:
+        loop = asyncio.get_running_loop()
+        while True:
+            # pick random lat/lon in valid ranges
+            print("PRELOAD EXECUTION STARTED")
+            try:
+                # layer_cache.loadOffset();
+                await loop.run_in_executor(
+                    None,
+                    lambda: layer_cache.preload_slices() #layer_cache.preload_to_local()
+                )
+            except Exception as exc:
+                logger.error(f"Pre-warm failed {exc}")
+            # wait before next one
+            #
+            print("PRELOAD EXECUTION COMPLETE")
+            await asyncio.sleep(interval_s)
+    except Exception as outer_exc:
+        logger.critical(f"_prewarm_loop has died with: {outer_exc}", exc_info=True)
+        start_prewarm()
+
+def start_prewarm():
+    print("GETTING STARTING WITH PREWARMING")
+    loop = asyncio.get_running_loop()
+    loop.create_task(_prewarm_loop(600.0))
 #———————————————————————————————
 # 2) start it on app startup
 #———————————————————————————————
 @app.on_event("startup")
 async def kick_off_prewarm():
     print("GETTING STARTING WITH PREWARMING")
-    asyncio.create_task(_prewarm_loop(600.0))
+    start_prewarm()
 ###############################################################################
 # Main entry point
 ###############################################################################

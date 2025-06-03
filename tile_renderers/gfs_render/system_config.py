@@ -57,7 +57,17 @@ class SystemConfig:
                 "param_key": "total-precipitation",
                 "typeOfLevel": "surface",
                 "level": 0,
-                "stepType": "accum"
+                "stepType": "accum",
+                "grbSearch": {
+                    "terms": {},
+                    "template": {
+                        "startStep": 0,
+                        "endStep": "{forecast_hr}"
+                    },
+                    "conditions": {
+                        "endStep": "int"
+                    }
+                }
             }],
             "lat": 0,
             "lon": 0,
@@ -69,10 +79,20 @@ class SystemConfig:
         # data = '''{
         #     "model": "gfs",
         #     "param_keys": [{
-        #         "param_key": "pressure-reduced-to-msl",
+        #         "param_key": "total-precipitation",
+        #         "typeOfLevel": "surface",
         #         "level": 0,
-        #         "typeOfLevel": "meanSea",
-        #         "stepType": "instant"
+        #         "stepType": "accum",
+        #         "grbSearch": {
+        #             "terms": {},
+        #             "template": {
+        #                 "startStep": 0,
+        #                 "endStep": "{forecast_hr}"
+        #             },
+        #             "conditions": {
+        #                 "endStep": "int"
+        #             }
+        #         }
         #     }],
         #     "lat": 0,
         #     "lon": 0,

@@ -56,7 +56,7 @@ class InterpolatorCachingService:
         inter = self.cache.get(key) or None
         if inter:
             inter = self._untangle_pickle(inter)
-            self.local_cache.set(key, inter)
+            self.local_cache.set(key, inter, CACHE_TTL)
             return inter
         return  None
 
@@ -74,7 +74,7 @@ class InterpolatorCachingService:
 
     def set_interpolator(self, key: str, inter: Interpolator) -> None:
         # Always update the local (level 2) cache immediately.
-        self.local_cache.set(key, inter)
+        self.local_cache.set(key, inter, CACHE_TTL)
         # Debounce the global cache update.
         with self.debounce_lock:
             # If a timer already exists for this key, cancel it.
@@ -266,7 +266,7 @@ class ModelService:
                     return date_str, run_str, fhr
         return None, None, None
 
-    def get_grib_file(self, model: str, hour_offset: int) -> Optional[str]:
+    def get_grib_file(self, model: str, hour_offset: int, grbSearch: Optional[Dict[str, Any]] = None) -> Optional[str]:
         d, r, fhr = self.find_date_run_fhr(model, hour_offset)
         if not d:
             return None
@@ -375,41 +375,69 @@ class ModelService:
         cache_key = self.get_interpolator_cache_key(model, param_key, hour_offset, level, level_type, step_type)
         def compute():
             return self.generate_interpolator(model, param_key, hour_offset, level, level_type, step_type)
-            # fp = self.get_grib_file(model, hour_offset)
-            # if not fp:
-            #     return None
-            # pm = self.build_param_map_for_offset(model)
-            # param_name = pm.get(param_key)
-            # if not param_name:
-            #     return None
-            # try:
-            #     with pygrib.open(fp) as grbs: # type: ignore
-            #         g = self._select_grib_message(grbs, param_name, level, level_type, step_type)
-            #         if not g:
-            #             return None
-            #         data = g.values
-            #         lats, lons = g.latlons()
-            #         lat_flip = self.flip_latitudes(self.build_interpolator_key(model, param_key, hour_offset, level, level_type, step_type), g)
-            #         ip = self.interpolator.build_interpolator(data, lats, lons, lat_flip=lat_flip, decimation=self.decimation)
-            #         # meta = self._extract_grib_metadata(g)
-            #         gmin = float(getattr(g, "minimum", 0.0))
-            #         gmax = float(getattr(g, "maximum", 1.0))
-            #         ip.gmin, ip.gmax = self.update_and_get_min_max(model, param_key, level if level is not None else 0,
-            #                                                        level_type if level_type is not None else 'surface',
-            #                                                        step_type if step_type is not None else 'instant',
-            #                                                        gmin, gmax)
-            #         ip.missing_val = float(getattr(g, "missingValue", 9999.0))
-            #         # Cache both the interpolator and its metadata together.
-            #         ip(self.config.get_global_pts_boundaries())
-            #         return ip
-            # except Exception as e:
-            #     logger.error(f"Error building interpolator: {e}", exc_info=True)
-            #     return None
         interpolator_cache = self.interpolator_cache.get_interpolator(cache_key)
         if interpolator_cache:
             return interpolator_cache
         return self._get_or_compute(cache_key, compute)
 
+    def interpolate_str(self, template: Any, mapping: dict[str, str]) -> str | None:
+        """
+        Replace placeholders in `template` with corresponding values from `mapping`.
+
+        Example:
+            template = "I am {cool}"
+            mapping = {"cool": "not cool"}
+            returns "I am not cool"
+        """
+        if not isinstance(template, str):
+            return None
+
+        try:
+            return template.format(**mapping)
+        except KeyError as e:
+            print(f"Missing key '{e.args[0]}' for string interpolation")
+
+        return None
+            # If a placeholder is missing in `mapping`, re-raise with a clear message.
+            # missing = e.args[0]
+            # raise KeyError(f"Missing key '{missing}' for string interpolation") from None
+
+    def _apply_search_conditions(self, key: str, search: Dict[str, Any], conditions: Optional[Dict[str, str]]):
+        if conditions is None or conditions.get(key) is None or search.get(key) is None:
+            return
+
+        def case_int(x):
+            return int(x)
+        def case_float(x):
+            return float(x)
+        def case_bool(x):
+            return bool(x)
+        if conditions[key] == 'int':
+            search[key] = case_int(search[key])
+        elif conditions[key] == 'float':
+            search[key] = case_float(search[key])
+        elif conditions[key] == 'bool':
+            search[key] = case_bool(search[key])
+
+    def _append_search(self, search: Dict[str, Any], grbSearch: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        if grbSearch is None:
+            return search
+        template = grbSearch.get("template", None)
+        if template is None:
+            return search
+        terms = grbSearch.get("terms", {})
+        conditions = grbSearch.get("conditions", None)
+        appendedSearch = search.copy()
+        try:
+            for key, value in template.items():
+                val = self.interpolate_str(value, terms)
+                appendedSearch[key] = val or value
+                self._apply_search_conditions(key, appendedSearch, conditions)
+        except KeyError as e:
+            # If a placeholder is missing in `template`, re-raise with a clear message.
+            print(f"Key/value interpolation error '{e}'")
+            return search
+        return appendedSearch;
 
     def _select_grib_message(
         self,
@@ -417,7 +445,8 @@ class ModelService:
         param_name: str,
         level: Optional[int],
         type_of_level: Optional[str],
-        step_type: Optional[str]
+        step_type: Optional[str],
+        grbSearch: Optional[Dict[str, Any]] = None
     ) -> Optional[Any]:
         search: Dict[str, str|int] = { "name": param_name }
         if level is not None:
@@ -426,12 +455,13 @@ class ModelService:
             search["typeOfLevel"] = type_of_level
         if step_type is not None:
             search["stepType"] = step_type
-
-        print("GRIB SEARCH CRITERIA", search)
+        # print("GRIB SEARCH CRITERIA", search)
         # if level is not None and type_of_level is not None:
         try:
-            sel = grbs.select(**search)
-            # print('I KEY GOT FOUND OUT', sel)
+            grbSelect = self._append_search(search, grbSearch);
+            print("I AM SELECTING THISE VALUES", grbSelect)
+            sel = grbs.select(**grbSelect)
+            print("MY GR.", sel , len(sel))
             if len(sel) == 1:
                 logger.debug(f"[Exact match] param={param_name}, level={level}, typeOfLevel={type_of_level}")
                 return sel[0]
@@ -440,7 +470,7 @@ class ModelService:
                 return None
             # for partial seraches we get close to the surface
             if len(sel) > 1:
-                priority = self.pull_priority_layers(sel)
+                priority = self.pull_priority_layers(sel, grbSearch)
                 if priority:
                     return priority
             # we then try to find a fallback
@@ -460,6 +490,119 @@ class ModelService:
         if name_details:
             meta['key'] = self.make_param_key(name_details)
         return meta
+
+    # def _find_midnight_for_offset(self, offset: int) -> int:
+    #     """
+    #     Given a forecast‐hour offset `offset`, return the nearest
+    #     “midnight” offset at or before it (i.e. largest multiple of 24 ≤ offset).
+    #     """
+    #     return (offset // 24) * 24
+
+    # def _get_24h_accum_message(
+    #     self,
+    #     grbs: Any,
+    #     param_name: str,
+    #     level: Optional[int],
+    #     type_of_level: Optional[str],
+    #     step_type: str,
+    #     target_offset: int,
+    #     grbSearch: Optional[Dict[str, Any]] = None
+    # ) -> Optional[Any]:
+    #     """
+    #     If step_type == "accum", fetch two messages:
+    #       - msg_N: accumulation from hour 0 → target_offset
+    #       - msg_M: accumulation from hour 0 → midnight_offset (M)
+    #     Then compute data_delta = msg_N.values - msg_M.values, and
+    #     attach adjusted metadata (e.g. forecastTime = target_offset - M).
+    #     Return a dummy object that holds (data_delta, lat, lon, metadata_delta).
+
+    #     If either msg_N or msg_M is missing, return None.
+    #     """
+    #     # 1) Build basic search dict (name/level/type/stepType)
+    #     base_search: Dict[str, Union[str,int]] = {"name": param_name}
+    #     if level is not None:
+    #         base_search["level"] = level
+    #     if type_of_level is not None:
+    #         base_search["typeOfLevel"] = type_of_level
+    #     base_search["stepType"] = "accum"
+
+    #     # 2) Merge with any extra grbSearch terms (e.g. forecastTime ranges)
+    #     if grbSearch:
+    #         merged = {**base_search, **grbSearch.get("terms", {})}
+    #     else:
+    #         merged = base_search.copy()
+
+    #     # 3) First fetch full‐accum up to target_offset
+    #     #    We want startStep=0, endStep=target_offset
+    #     midnight_off = self._find_midnight_for_offset(target_offset)
+    #     # To guarantee we pick exactly the “0 → target_offset” message,
+    #     # merge forecastTime constraint if present:
+    #     merged_N = merged.copy()
+    #     merged_N["startStep"] = 0
+    #     merged_N["endStep"] = target_offset
+
+    #     try:
+    #         candidates_N = grbs.select(**merged_N)
+    #     except Exception:
+    #         candidates_N = []
+
+    #     if not candidates_N:
+    #         # No “0→N” accumulation available
+    #         return None
+    #     # If multiple, pick first. (In most GFS files there should be exactly one.)
+    #     msg_N = candidates_N[0]
+
+    #     # 4) Next fetch full‐accum up to midnight_off (the previous 24h boundary).
+    #     #    If midnight_off == target_offset, then msg_M is effectively “zeroed” (no subtraction).
+    #     if midnight_off == target_offset:
+    #         # If we’re at a perfect 24h boundary, there's no “previous accumulation”
+    #         # we can treat msg_M as all zeros.
+    #         data_M = np.zeros_like(msg_N.values)
+    #         lat_M, lon_M = msg_N.latlons()
+    #         # Build metadata: forecastTime=M;
+    #         meta_M = self._extract_grib_metadata(msg_N)
+    #         meta_M["forecastTime"] = midnight_off
+    #     else:
+    #         merged_M = merged.copy()
+    #         merged_M["startStep"] = 0
+    #         merged_M["endStep"] = midnight_off
+
+    #         try:
+    #             candidates_M = grbs.select(**merged_M)
+    #         except Exception:
+    #             candidates_M = []
+
+    #         if not candidates_M:
+    #             # Can't find the pre‐midnight accumulation; give up.
+    #             return None
+    #         msg_M = candidates_M[0]
+    #         data_M = msg_M.values
+    #         lat_M, lon_M = msg_M.latlons()
+    #         meta_M = self._extract_grib_metadata(msg_M)
+
+    #     # 5) Subtract arrays to get 24h delta
+    #     data_delta = msg_N.values - data_M
+    #     lat_delta, lon_delta = msg_N.latlons()  # same grid as msg_N
+    #     meta_N = self._extract_grib_metadata(msg_N)
+
+    #     # 6) Build a synthetic “GRIB‐like” object for the 24h delta:
+    #     class _SyntheticGRIB:
+    #         pass
+
+    #     synth = _SyntheticGRIB()
+    #     # Attach just enough attributes so downstream code (that does `.values` and `.latlons()`) will work:
+    #     synth.values = data_delta
+    #     synth.latlons = lambda: (lat_delta, lon_delta)
+
+    #     # Build merged metadata: carry over everything from msg_N,
+    #     # but override "forecastTime" to be the 24h window length (target_offset-midnight_off).
+    #     merged_meta = meta_N.copy()
+    #     merged_meta["forecastTime"] = target_offset - midnight_off
+    #     merged_meta["accumulated_from"] = midnight_off
+    #     merged_meta["accumulated_to"] = target_offset
+    #     synth._metadata = merged_meta
+
+    #     return synth
 
     def get_interpolator_metadata(
         self,
@@ -484,7 +627,7 @@ class ModelService:
             return filtered[0]
         return None
 
-    def pull_priority_layers(self, matches: List[Any]):
+    def pull_priority_layers(self, matches: List[Any], grbSearch: Optional[Dict[str, Any]] = None):
         def get_priority(item):
             if item.typeOfLevel == "surface":
                 return 0
@@ -528,7 +671,7 @@ class ModelService:
 
         for i in range(2):
             try:
-                print(f"Searching in range {i} {select}")
+                select["level"] = i
                 found = grbs.select(**select)
                 if found:
                     logger.info(f"Found surface data (level={i}) for param={param_name} ")
@@ -583,7 +726,7 @@ class ModelService:
         level: Optional[int] = None,
         step_type: Optional[str] = None
     ) -> Optional[Any]:
-        print('GETTING THIS DATA ',param_name, type_of_level, level, step_type)
+        # print('GETTING THIS DATA ',param_name, type_of_level, level, step_type)
         layer = self.search_for_provided_level(grbs, param_name, type_of_level, level, step_type)
         if layer:
             return layer
@@ -688,7 +831,6 @@ class ModelService:
             now += timedelta(hours=1)
         adjusted_time = now + timedelta(hours=offset)
         key = f"{adjusted_time.day:02}:{adjusted_time.hour:02}"
-        print(f"I AM THE KEY FOR THIS HOUR {key} {offset}")
         return key
 
     def create_tile_cache_key(
@@ -982,12 +1124,13 @@ class ModelService:
         hour_offset: int,
         level: Optional[int] = None,
         type_of_level: Optional[str] = None,
-        step_type: Optional[str] = None
+        step_type: Optional[str] = None,
+        grbSearch: Optional[Dict[str, Any]] = None
     ):
         cache_key = self._get_grib_array_values_key(param_name, model, hour_offset, level, type_of_level, step_type)
         def compute():
             try:
-                g = self._select_grib_message(grbs, param_name , level, type_of_level, step_type)
+                g = self._select_grib_message(grbs, param_name , level, type_of_level, step_type, grbSearch)
                 if not g:
                     logger.warning(f"No suitable GRIB message found for {param_name}")
                     return None
@@ -1008,13 +1151,33 @@ class ModelService:
                 return None
         return self._get_or_compute(cache_key, compute, CACHE_TTL * 3)
 
+    def _append_file_meta_values(self, fp: str, hour_offset: int, search: Dict[str, Any] = {}) :
+        parts = fp.split(os.sep)
+        # parts[-3] should be the date directory, parts[-2] the run‐hour, and parts[-1] the filename.
+        date_dir = parts[-3]
+        run_hour = parts[-2]
 
-    def _get_raw_grib(self, model: str, hour_offset: int,
-                                cache_expire: int = CACHE_TTL) -> Optional[Any]: # Optional[List[Any]] :
+        filename = parts[-1]
+        # Find the 'fXXX' portion before ".grib2"
+        m = re.search(r'\.f(\d+)(?:\.grib2)?$', filename)
+        if not m:
+            raise ValueError(f"Could not extract forecast hour from '{filename}'")
+        forecast_hr = int(m.group(1))
+        search["forecast_hr"] = forecast_hr
+        search["offset"] = hour_offset
+        search["fp"] = fp
+        search["run_hour"] = run_hour
+        search["date"] = date_dir
+
+    def _get_raw_grib(self, model: str, hour_offset: int, search: Optional[Dict[str, str]] = None) -> Optional[List[bytes]]: # Optional[List[Any]] :
         fp = self.get_grib_file(model, hour_offset)
         if not fp:
             logger.warning(f"No GRIB file for {model} offset {hour_offset}")
             return None
+
+        if search is not None:
+           self._append_file_meta_values(fp, hour_offset, search)
+
         try:
             return pygrib.open(fp) # type: ignore
         except Exception as exc:
@@ -1088,6 +1251,8 @@ class ModelService:
             # Check again in case another thread computed while waiting
             cached = self._cache_get(key)
             if cached is not None:
+                if expire > 0:
+                    self.cache.extend(key, expire)
                 return cached
             result = compute_fn()
             if result is not None:
