@@ -274,9 +274,10 @@ class ModelService:
         folder = os.path.join(self.GRIB_FILES_PATH, d, r)  # type: ignore
         fname = f"{cfg['FILE_PREFIX']}.t{r}z.{cfg['FILE_CATEGORY']}.{cfg['RESOLUTION']}.f{fhr:03d}{cfg['FILE_APPENDIX']}"
         fullpath = os.path.join(folder, fname)
-        print("WHAT IS THIS", fullpath)
         if os.path.exists(fullpath):
             return fullpath
+
+        print("WHAT IS THIS", fullpath)
         return None
     # -------------------------------------------------------------------------
     # Building Param Map
