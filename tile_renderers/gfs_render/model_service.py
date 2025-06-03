@@ -262,7 +262,6 @@ class ModelService:
                 folder = os.path.join(self.GRIB_FILES_PATH, date_str, run_str)
                 fname = f"{prefix}.t{run_str}z.{category}.{resolution}.{f_str}{appendix}"
                 path = os.path.join(folder, fname)
-                print("MY PATH", path)
                 if os.path.exists(path):
                     return date_str, run_str, fhr
         return None, None, None
@@ -275,6 +274,7 @@ class ModelService:
         folder = os.path.join(self.GRIB_FILES_PATH, d, r)  # type: ignore
         fname = f"{cfg['FILE_PREFIX']}.t{r}z.{cfg['FILE_CATEGORY']}.{cfg['RESOLUTION']}.f{fhr:03d}{cfg['FILE_APPENDIX']}"
         fullpath = os.path.join(folder, fname)
+        print("WHAT IS THIS", fullpath)
         if os.path.exists(fullpath):
             return fullpath
         return None
