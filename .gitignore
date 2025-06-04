@@ -8,3 +8,5 @@ output_tiles
 grib
 __pycache__
 .ropeproject
+.env
+*.log

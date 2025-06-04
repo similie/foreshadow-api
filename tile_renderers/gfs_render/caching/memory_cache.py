@@ -17,3 +17,6 @@ class InMemoryCacheBackend(ICacheBackend):
 
     def available(self, key: str) -> bool:
          return key in self.store
+
+    def extend(self, key: str, expire: int = 0):
+        raise NotImplementedError

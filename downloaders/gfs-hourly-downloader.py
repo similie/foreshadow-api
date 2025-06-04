@@ -17,7 +17,11 @@ import os
 import re
 import shutil
 from datetime import datetime, timedelta, UTC
+from dotenv import load_dotenv, find_dotenv
 
+env_file = find_dotenv()                     # returns path or ''
+print("Loading .env from:", env_file)
+load_dotenv(env_file, verbose=True)
 # ---------------------------------------------------------------------------
 # CONSTANTS / CONFIG
 # ---------------------------------------------------------------------------
