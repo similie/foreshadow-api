@@ -187,7 +187,7 @@ def fetch_sparse_data(downloaded_map: dict, today_str: str) -> bool:
         else:
             required_hours = SHORT_RANGE
 
-        prefix = f"{S3_BASE_PATH}.{today_str}/{hour}/"
+        prefix = f"{S3_BASE_PATH}/{today_str}/{hour}/"
         local_dir = os.path.join(LOCAL_BASE_PATH, today_str, hour)
 
         if download_sparse_files(local_dir, prefix, today_str, hour, required_hours, downloaded_map):
