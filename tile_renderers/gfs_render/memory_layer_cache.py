@@ -106,13 +106,17 @@ class MemoryLayerCache:
 
     def _cache_set(self, key: str, value: Any) -> None:
         try:
-            self._cacheStore.set(key, pickle.dumps(value, protocol=4), expire=self._ttl_3)
+            self._cacheStore.set(key, pickle.dumps(value, protocol=4), expire=self._ttl)
         except Exception as e:
             logger.error(f"Error setting cache key {key}: {e}")
 
     def _get_cache_key(self, param_key: str, offset: int) -> str:
         hour_key = self.model_service.todays_hour_with_date(offset)
         return f"layer_cache:{param_key}@{hour_key}"
+
+    def _get_expire_key(self, param_key: str, offset: int) -> str:
+        hour_key = self.model_service.todays_hour_with_date(offset)
+        return f"layer_expire:{param_key}@{hour_key}"
 
     def _preload_offset(self, off: int) -> None:
         # hour_key = self.model_service.todays_hour_with_date(off)
@@ -123,12 +127,15 @@ class MemoryLayerCache:
             tof = entry.get("typeOfLevel")
             stp = entry.get("stepType")
             key = self._get_cache_key(pk, off)
+            expire_key = self._get_expire_key(pk, off)
             try:
                 available = self._cacheStore.available(key)
+                has_expire = self._localStorage.available(expire_key)
                 print(f"[Preload] Building interpolator for {key} {available}")
-                if available:
-                    self._cacheStore.extend(key, self._ttl_3)
+                if available and has_expire:
+                    self._cacheStore.extend(key, self._ttl)
                     continue
+
                 ip = self.model_service.generate_interpolator(
                     self.model, pk, off, lvl, tof, stp
                 )
@@ -136,7 +143,9 @@ class MemoryLayerCache:
                     print(f"[Preload] Skipped {pk}@{off} (no data)")
                     continue
                 print(f"[Preload] Setting cache key {key}")
+
                 self._cache_set(key, ip)
+                self._localStorage.set(expire_key, True, self._ttl_3)
             except Exception as e:
                 logger.error(f"Error setting cache key {key}: {e}")
             # with self._lock:
