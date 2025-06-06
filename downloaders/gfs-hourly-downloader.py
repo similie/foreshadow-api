@@ -18,6 +18,7 @@ import re
 import shutil
 from datetime import datetime, timedelta, UTC
 from dotenv import load_dotenv, find_dotenv
+import json
 
 env_file = find_dotenv()                     # returns path or ''
 print("Loading .env from:", env_file)
@@ -36,9 +37,9 @@ FILE_NAME_PATTERNS = [
 ]
 
 #LOCAL_BASE_PATH = "/Volumes/ModelBackup/HyphenForecaster/gfs_slim"
-LOCAL_BASE_PATH = os.getenv("GRIB_FILES_PATH", "/home/guernica0131/Sites/foreshadow-api/grib")
+LOCAL_BASE_PATH = os.getenv("GRIB_FILES_PATH", "/Users/guernica0131/Sites/hyphen-forecaster/grib")
 MAX_DAYS = 5
-
+STATE_FILE = os.path.join(LOCAL_BASE_PATH, "downloaded_index.json")
 # These will be used *per hour* depending on whether it's 00 or not:
 #  - 00 => 0..384
 #  - 06,12,18 => 0..23
@@ -47,7 +48,13 @@ SHORT_RANGE = list(range(0, 24))   # up to f023
 STEP_RANGE = list(range(123, 387, 3))   # up to f023
 # Boto3 S3 client
 s3 = boto3.client("s3")
+# Load at startup (if it exists)…
 
+# # …after fetch_sparse_data, dump it back out:
+# pulled_new_data = fetch_sparse_data(downloaded_files_map, today_str)
+# if pulled_new_data:
+#     with open(STATE_FILE, "w") as fp:
+#         json.dump(downloaded_files_map, fp)
 # ---------------------------------------------------------------------------
 # HELPER FUNCTIONS
 # ---------------------------------------------------------------------------
@@ -145,7 +152,8 @@ def download_sparse_files(
 
             # If we already have this forecast hour or file exists, skip
             if hr_val in existing_fvals or os.path.exists(local_path):
-                downloaded_any = True
+
+                # downloaded_any = True
                 continue
 
             print(f"Downloading {obj_key} -> {local_path}")
@@ -187,9 +195,10 @@ def fetch_sparse_data(downloaded_map: dict, today_str: str) -> bool:
         else:
             required_hours = SHORT_RANGE
 
-        prefix = f"{S3_BASE_PATH}/{today_str}/{hour}/"
+        prefix = f"{S3_BASE_PATH}.{today_str}/{hour}/"
+        print(f"Fetching data for {prefix}")
         local_dir = os.path.join(LOCAL_BASE_PATH, today_str, hour)
-
+        print(f"local dir: {local_dir}")
         if download_sparse_files(local_dir, prefix, today_str, hour, required_hours, downloaded_map):
             new_data_found = True
 
@@ -212,7 +221,7 @@ def is_00_coverage_complete(downloaded_map: dict, date_str: str) -> bool:
     first_120 = set(SHORT_RANGE)
     if not first_120.issubset(fvals):
         return False
-
+    # FULL_3H_RANGE = set(range(0, 385, 3))
     upto_384 = set(STEP_RANGE)
     # Check if the last required hour (384) is present
     print(upto_384)
@@ -321,10 +330,19 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     downloaded_files_map = {}
+    # try:
+    #     with open(STATE_FILE) as fp:
+    #         downloaded_files_map = json.load(fp)
+    # except (FileNotFoundError, json.JSONDecodeError):
+    #     downloaded_files_map = {}
+
     # 1) Fetch today's data
     target_date = datetime.now(UTC) + timedelta(days=args.date_offset)  # Default: Today
     today_str = target_date.strftime("%Y%m%d")
     pulled_new_data = fetch_sparse_data(downloaded_files_map, today_str)
+    # if pulled_new_data:
+    #     with open(STATE_FILE, "w") as fp:
+    #         json.dump(downloaded_files_map, fp)
     # 2) Only clean up if:
     #    - we downloaded something new today
     #    - and the 00 coverage is complete up to f384

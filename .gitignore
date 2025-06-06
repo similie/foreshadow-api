@@ -10,3 +10,4 @@ __pycache__
 .ropeproject
 .env
 *.log
+downloaded_index.json
