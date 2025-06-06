@@ -3,6 +3,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Any, Optional
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 # from gfs_render import ModelService, SystemConfig, LocalStorage
 from .model_service import ModelService
@@ -39,7 +40,7 @@ class MemoryLayerCache:
 
     def get_worker_count(self):
         # max_cores = 24
-        cpu_count = (os.cpu_count() or 8 ) / 2
+        cpu_count = math.ceil( (os.cpu_count() or 8 ) / 2)
         return cpu_count
         #return cpu_count if cpu_count < max_cores else max_cores if cpu_count > max_cores else 4
     def _append_midnight_indices(self,range_hours: List[int]):
@@ -154,7 +155,7 @@ class MemoryLayerCache:
             return None
         key = self._get_cache_key(key_name, offset)
         # look for it in local storage
-        # print("going local", key)
+        print("going local", key)
         if self._localStorage.available(key):
             self._localStorage.extend(key, self._ttl_local);
             return self._localStorage.get(key)
@@ -173,7 +174,8 @@ class MemoryLayerCache:
             offset,
             key_value.get("level"),
             key_value.get("typeOfLevel"),
-            key_value.get("stepType")
+            key_value.get("stepType"),
+            self._apply_search_tems(key_value, {})
         )
         # print("I HAVE a new result here",result, key_name)
         # self._cacheStore.set(key, result, self._ttl_3)
@@ -197,8 +199,8 @@ class MemoryLayerCache:
     #             return None
     #     return ip
 
-    def apply_extras_details(self, records: list[Any]):
-        self.weather_utils.apply_extras_details(records)
+    # def apply_extras_details(self, records: list[Any]):
+    #     self.weather_utils.apply_extras_details(records)
 
     # def get_current_slice(self, lat: float, lon: float, off: int):
     #     dt = self._get_base_time() + timedelta(hours=off)
@@ -305,6 +307,7 @@ class MemoryLayerCache:
         def _compute_for_offset(key_value: Any):
             sendResults = {"values" : []}
             try:
+                print("I AND GENERATING FOR THESE PARAM", key_value)
                 for off in offsets:
                     result = self._get_cached_values(key_value, off)
                     if not result:
@@ -356,7 +359,7 @@ class MemoryLayerCache:
         lat: float,
         lon: float) -> List[Dict[str, Any]]:
         # self.normalize_precipitation_24h(slice_results, lat, lon)
-        # self.weather_utils.apply_extras_details(slice_results, lat, lon)
+        self.weather_utils.apply_extras_details(slice_results, lat, lon)
         return slice_results
 
 

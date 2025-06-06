@@ -19,11 +19,11 @@ import json
 import os
 import io
 import logging
-from typing import  List, Optional, Union, Dict, Any, Sequence
+from typing import  List, Optional, Union
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
-import asyncio, random
+import asyncio
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv, find_dotenv
@@ -32,7 +32,6 @@ env_file = find_dotenv()                     # returns path or ''
 print("Loading .env from:", env_file)
 load_dotenv(env_file, verbose=True)
 
-# slave = "SLAVE_MODE" in os.environ
 # Import your project modules (adjust paths as needed)
 from gfs_render import ModelService, RedisCacheBackend, TileRendering, MemoryLayerCache
 # from gfs_render.time_logger import TimeLogger

@@ -22,8 +22,11 @@ class WeatherUtils:
             """
             # Locate u- and v- component series
             try:
-                u_series = next(r for r in records if r["param_key"] == "10-metre-u-wind-component")["values"]
-                v_series = next(r for r in records if r["param_key"] == "10-metre-v-wind-component")["values"]
+                u_series_details =  next(r for r in records if r["metadata"]["key"] == "10-metre-u-wind-component")
+                v_series_details = next(r for r in records if r["metadata"]["key"] == "10-metre-v-wind-component")
+                meta = v_series_details["metadata"]
+                u_series = u_series_details["values"]
+                v_series = v_series_details["values"]
             except StopIteration:
                 # If either component is missing, nothing to do
                 return
@@ -32,32 +35,37 @@ class WeatherUtils:
                 "parameterName": "10 Meter Wind Direction",
                 "parameterUnits": unit,
                 "shortName": "wd",
-                "typeOfLevel": "heightAboveGround",
-                "level": 10,
+                "typeOfLevel": meta["typeOfLevel"],
+                "level": meta["level"],
                 "min": 0,
                 "max": 360,
                 "name": "10 metre derrived wind direction",
-                "stepType": "instant",
+                "stepType": meta["stepType"],
                 "key": "10-metre-wind-direction"
             }
             # Build quick lookup by datetime
-            u_map = {item["datetime"]: item["value"] for item in u_series}
-            v_map = {item["datetime"]: item["value"] for item in v_series}
+
 
             # Compute direction for each timestamp present in both
-            direction_values = []
-            for dt in sorted(set(u_map).intersection(v_map)):
-                u = u_map[dt]
-                v = v_map[dt]
-                # use your existing utility to get meteorological wind direction
-                wd = self.wind_direction(u, v)
-                direction_values.append({
-                    "datetime": dt,
-                    "value": wd
-                })
+            try:
+                u_map = {item["datetime"]: item["value"] for item in u_series}
+                v_map = {item["datetime"]: item["value"] for item in v_series}
 
-            # Append the new timeseries
-            records.append({
-                "metadata": metadata,
-                "values": direction_values
-            })
+                direction_values = []
+                for dt in sorted(set(u_map).intersection(v_map)):
+                    u = u_map[dt]
+                    v = v_map[dt]
+                    # use your existing utility to get meteorological wind direction
+                    wd = self.wind_direction(u, v)
+                    direction_values.append({
+                        "datetime": dt,
+                        "value": round(wd, 3)
+                    })
+
+                # Append the new timeseries
+                records.append({
+                    "values": direction_values,
+                    "metadata": metadata
+                })
+            except Exception as e:
+                print("ERROR: Weather.apply_extras_details", e)
