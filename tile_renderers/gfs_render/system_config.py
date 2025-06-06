@@ -1,4 +1,3 @@
-from sysconfig import get_default_scheme
 import numpy as np
 from typing import Dict
 import os
@@ -107,7 +106,7 @@ class SystemConfig:
         self.WEB_MERCATOR_CONSTANT = 20037508.342789244
         self.TILE_SIZE = 256
         self.decimation = 2
-        self.GRIB_FILES_PATH =  os.getenv("GRIB_FILES_PATH", "/Users/guernica0131/Sites/foreshadow-api/grib")
+        self.GRIB_FILES_PATH =  os.getenv("GRIB_FILES_PATH", "/home/guernica0131/Sites/foreshadow-api/grib")
 
         self.MODEL_MAP = {
             "gfs": {

@@ -251,10 +251,12 @@ class ModelService:
         category = cfg["FILE_CATEGORY"]
         resolution = cfg["RESOLUTION"]
         appendix = cfg["FILE_APPENDIX"]
+
         for rd in runs:
             diff_hrs = (target_dt - rd).total_seconds() / 3600.0
             offset = int(round(diff_hrs))
             fhr = self.process_hour_offset(offset)
+            print('I AM ATTEMPTING TO FIND THESE FILES', cfg, prefix, category, resolution, appendix,diff_hrs,offset, fhr)
             if 0 <= fhr <= 384:
                 date_str = rd.strftime("%Y%m%d")
                 run_str = f"{rd.hour:02d}"
@@ -262,12 +264,14 @@ class ModelService:
                 folder = os.path.join(self.GRIB_FILES_PATH, date_str, run_str)
                 fname = f"{prefix}.t{run_str}z.{category}.{resolution}.{f_str}{appendix}"
                 path = os.path.join(folder, fname)
+                print("CHECKING THIS PATH", path)
                 if os.path.exists(path):
                     return date_str, run_str, fhr
         return None, None, None
 
     def get_grib_file(self, model: str, hour_offset: int, grbSearch: Optional[Dict[str, Any]] = None) -> Optional[str]:
         d, r, fhr = self.find_date_run_fhr(model, hour_offset)
+        print("MY FILE ELEMENTS", d, r, fhr)
         if not d:
             return None
         cfg = self.MODEL_MAP[model]
@@ -337,7 +341,9 @@ class ModelService:
             return None
 
         try:
+            print("OPENING WITH THIS FILE PATH", file_path)
             with pygrib.open(file_path) as grbs: # type: ignore
+                print("Is this occuring here", grbs)
                 g = self._select_grib_message(grbs, param_name, level, level_type, step_type)
                 if not g:
                     return None
@@ -1090,6 +1096,7 @@ class ModelService:
             return values
         pm = self.build_param_map_for_offset(model)
         grbs = self._get_raw_grib(model, hour_offset)
+        print("WHAT THE FGUCKJER", grbs)
         if not grbs:
             logger.warning(f"No GRIB file for {model} offset {hour_offset}")
             return values
@@ -1112,7 +1119,7 @@ class ModelService:
                 values[param_key.get("key", key_name)] = result
             except Exception as exc:
                 logger.error(f"Error building interpolator: {exc}", exc_info=True)
-        grbs.close()
+        grbs.close() # type: ignore
         self._cache_set(cache_key, values)
         return values
 
@@ -1130,6 +1137,7 @@ class ModelService:
         cache_key = self._get_grib_array_values_key(param_name, model, hour_offset, level, type_of_level, step_type)
         def compute():
             try:
+                print("WHAT THE FUCKER", grbs)
                 g = self._select_grib_message(grbs, param_name , level, type_of_level, step_type, grbSearch)
                 if not g:
                     logger.warning(f"No suitable GRIB message found for {param_name}")
@@ -1171,7 +1179,7 @@ class ModelService:
 
     def _get_raw_grib(self, model: str, hour_offset: int, search: Optional[Dict[str, str]] = None) -> Optional[List[bytes]]: # Optional[List[Any]] :
         fp = self.get_grib_file(model, hour_offset)
-
+        print("I am running this file", fp, search)
         if fp is None:
             logger.warning(f"No GRIB file for {model} offset {hour_offset} {fp}")
             return None
