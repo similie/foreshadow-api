@@ -3,6 +3,33 @@ from typing import Dict
 import os
 import json
 class SystemConfig:
+    def get_rainfall_test(self):
+        data = '''{
+            "model": "gfs",
+            "param_keys": [{
+                "param_key": "total-precipitation",
+                "typeOfLevel": "surface",
+                "level": 0,
+                "stepType": "accum",
+                "grbSearch": {
+                    "terms": {},
+                    "template": {
+                        "startStep": 0,
+                        "endStep": "{forecast_hr}"
+                    },
+                    "conditions": {
+                        "endStep": "int"
+                    }
+                }
+            }],
+            "lat": 0,
+            "lon": 0,
+            "start_hour_offset": 0,
+            "total_days": 5,
+            "step_hours": 3
+        }'''
+        return json.loads(data)
+
     def get_default_forecast_json(self):
         data = '''{
             "model": "gfs",
@@ -99,7 +126,7 @@ class SystemConfig:
         #     "total_days": 5,
         #     "step_hours": 3
         # }'''
-
+        # return self.get_rainfall_test()
         return json.loads(data)
 
     def __init__(self):

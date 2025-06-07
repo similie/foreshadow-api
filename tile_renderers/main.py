@@ -272,6 +272,17 @@ def forecast(lat: float, lon: float, hour_offset: int = 0):
     except Exception as e:
         logger.error(f"Error in preconfigured forecast: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# @app.get("/forecast-test")
+# def forecast_rainfall_test(lat: float, lon: float, hour_offset: int = 0):
+#     try:
+#         result = layer_cache.find_slice_test(lat, lon, hour_offset)
+#         if not result:
+#             raise HTTPException(status_code=404, detail="No data for that offset.")
+#         return JSONResponse(content=result)
+#     except Exception as e:
+#         logger.error(f"Error in preconfigured forecast: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
 # @app.get("/forecast")
 # def predefined_forecast(lat: float, lon: float , hour_offset: int = 0):
 #     total_days = 5

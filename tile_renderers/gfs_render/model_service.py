@@ -256,7 +256,6 @@ class ModelService:
             diff_hrs = (target_dt - rd).total_seconds() / 3600.0
             offset = int(round(diff_hrs))
             fhr = self.process_hour_offset(offset)
-            print('I AM ATTEMPTING TO FIND THESE FILES', cfg, prefix, category, resolution, appendix,diff_hrs,offset, fhr)
             if 0 <= fhr <= 384:
                 date_str = rd.strftime("%Y%m%d")
                 run_str = f"{rd.hour:02d}"
@@ -264,14 +263,12 @@ class ModelService:
                 folder = os.path.join(self.GRIB_FILES_PATH, date_str, run_str)
                 fname = f"{prefix}.t{run_str}z.{category}.{resolution}.{f_str}{appendix}"
                 path = os.path.join(folder, fname)
-                print("CHECKING THIS PATH", path)
                 if os.path.exists(path):
                     return date_str, run_str, fhr
         return None, None, None
 
     def get_grib_file(self, model: str, hour_offset: int, grbSearch: Optional[Dict[str, Any]] = None) -> Optional[str]:
         d, r, fhr = self.find_date_run_fhr(model, hour_offset)
-        print("MY FILE ELEMENTS", d, r, fhr)
         if not d:
             return None
         cfg = self.MODEL_MAP[model]
@@ -464,10 +461,8 @@ class ModelService:
         # print("GRIB SEARCH CRITERIA", search)
         # if level is not None and type_of_level is not None:
         try:
-            grbSelect = self._append_search(search, grbSearch);
-            print("I AM SELECTING THISE VALUES", grbSelect)
+            grbSelect = self._append_search(search, grbSearch)
             sel = grbs.select(**grbSelect)
-            print("MY GR.", sel , len(sel))
             if len(sel) == 1:
                 logger.debug(f"[Exact match] param={param_name}, level={level}, typeOfLevel={type_of_level}")
                 return sel[0]
@@ -489,12 +484,22 @@ class ModelService:
     def _extract_grib_metadata(self, grb_msg: Any) -> Dict[str, Any]:
         relevant_keys = [
             "parameterName", "parameterUnits", "shortName", "typeOfLevel", "level",
-            "minimum", "maximum", "dataDate", "dataTime", "forecastTime", "name", "stepType"
+            "minimum", "maximum", "dataDate", "dataTime", "forecastTime", "name", "stepType", "startStep", "endStep"
         ]
         meta = {k: getattr(grb_msg, k, None) for k in relevant_keys}
         name_details = meta["name"]
         if name_details:
             meta['key'] = self.make_param_key(name_details)
+
+        forcast_time = meta.get("forecastTime", 0)
+        start_step = meta.get("startStep", None)
+        end_step = meta.get("endStep", None)
+        if start_step is None or end_step is None:
+            return meta
+
+        if start_step == forcast_time and start_step < end_step:
+            meta["forecastTime"] = end_step
+
         return meta
 
     # def _find_midnight_for_offset(self, offset: int) -> int:
@@ -923,7 +928,7 @@ class ModelService:
                 result = values_dict.get(param_key)
                 if result is None:
                     raise ValueError(f"No cached values for {param_key}")
-                data_array, lat_array, lon_array, meta_dict = result
+                data_array, lat_array, lon_array, meta_dict, off = result
                 val = self.interpolate_value(data_array, lat_array, lon_array, lat, lon)
                 return {"value": float(val), "units": meta_dict.get("parameterUnits", "unknown"), "metadata": meta_dict}
 
@@ -1096,7 +1101,6 @@ class ModelService:
             return values
         pm = self.build_param_map_for_offset(model)
         grbs = self._get_raw_grib(model, hour_offset)
-        print("WHAT THE FGUCKJER", grbs)
         if not grbs:
             logger.warning(f"No GRIB file for {model} offset {hour_offset}")
             return values
@@ -1137,7 +1141,6 @@ class ModelService:
         cache_key = self._get_grib_array_values_key(param_name, model, hour_offset, level, type_of_level, step_type)
         def compute():
             try:
-                print("WHAT THE FUCKER", grbs)
                 g = self._select_grib_message(grbs, param_name , level, type_of_level, step_type, grbSearch)
                 if not g:
                     logger.warning(f"No suitable GRIB message found for {param_name}")
@@ -1153,7 +1156,8 @@ class ModelService:
                     data_array = data_array[::self.decimation, ::self.decimation]
                     lat_array = lat_array[::self.decimation, ::self.decimation]
                     lon_array = lon_array[::self.decimation, ::self.decimation]
-                return (data_array, lat_array, lon_array, self._extract_grib_metadata(g))
+                meta = self._extract_grib_metadata(g)
+                return (data_array, lat_array, lon_array, meta, hour_offset)
             except Exception as e:
                 logger.error(f"Error building interpolator: {e}", exc_info=True)
                 return None
@@ -1179,7 +1183,6 @@ class ModelService:
 
     def _get_raw_grib(self, model: str, hour_offset: int, search: Optional[Dict[str, str]] = None) -> Optional[List[bytes]]: # Optional[List[Any]] :
         fp = self.get_grib_file(model, hour_offset)
-        print("I am running this file", fp, search)
         if fp is None:
             logger.warning(f"No GRIB file for {model} offset {hour_offset} {fp}")
             return None
