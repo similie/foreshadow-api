@@ -152,8 +152,7 @@ def download_sparse_files(
 
             # If we already have this forecast hour or file exists, skip
             if hr_val in existing_fvals or os.path.exists(local_path):
-
-                # downloaded_any = True
+                downloaded_any = True
                 continue
 
             print(f"Downloading {obj_key} -> {local_path}")
