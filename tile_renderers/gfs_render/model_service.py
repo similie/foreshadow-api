@@ -338,9 +338,7 @@ class ModelService:
             return None
 
         try:
-            print("OPENING WITH THIS FILE PATH", file_path)
             with pygrib.open(file_path) as grbs: # type: ignore
-                print("Is this occuring here", grbs)
                 g = self._select_grib_message(grbs, param_name, level, level_type, step_type)
                 if not g:
                     return None
