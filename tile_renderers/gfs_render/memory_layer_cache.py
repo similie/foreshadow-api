@@ -30,6 +30,7 @@ class MemoryLayerCache:
         self._cache: Dict[str, Any] = {}
         self._lock = threading.Lock()
         self._loading = False
+        self._loading_tile = False
         self._init_run = True
         self._cacheStore = memory
         self._localStorage = LocalStorage()
@@ -537,3 +538,30 @@ class MemoryLayerCache:
         self._loading = False
         self._init_run = False
         print("Preload completed")
+
+    def _preload_param(self, entry: Dict[str, Any]) -> None:
+        pk = entry["param_key"]
+        logger.info(f"[Preload] Param={pk}")
+        for off in range(6):
+            ip = self.model_service.get_or_build_interpolator(
+                self.model, pk, off,
+                entry.get("level"), entry.get("typeOfLevel"), entry.get("stepType")
+            )
+            if not ip:
+                continue
+        logger.info(f"[Preload] Completed param {pk}")
+
+    def preload_tiles(self) -> None:
+        """
+        Precompute and store every (param_key, offset) interpolator in its Redis hash.
+        """
+        if self._loading_tile:
+            return
+        self._loading_tile = True
+
+        workers = self.get_worker_count()
+        logger.info(f"[RedisLayerCache] Preloading {len(self.offsets)} offsets × {len(self.param_keys)} params using {workers} workers")
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            executor.map(self._preload_param, self.param_keys.copy())
+
+        self._loading_tile = False

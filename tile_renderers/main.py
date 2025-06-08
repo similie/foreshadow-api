@@ -273,45 +273,6 @@ def forecast(lat: float, lon: float, hour_offset: int = 0):
         logger.error(f"Error in preconfigured forecast: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# @app.get("/forecast-test")
-# def forecast_rainfall_test(lat: float, lon: float, hour_offset: int = 0):
-#     try:
-#         result = layer_cache.find_slice_test(lat, lon, hour_offset)
-#         if not result:
-#             raise HTTPException(status_code=404, detail="No data for that offset.")
-#         return JSONResponse(content=result)
-#     except Exception as e:
-#         logger.error(f"Error in preconfigured forecast: {e}")
-#         raise HTTPException(status_code=500, detail=str(e))
-# @app.get("/forecast")
-# def predefined_forecast(lat: float, lon: float , hour_offset: int = 0):
-#     total_days = 5
-#     max_hours = 24 * (total_days - 1 )
-#     if hour_offset > max_hours:
-#         return HTTPException(status_code=400, detail="Invalid hour offset. It cannot exceed four days")
-
-#     if lat is None or lon is None:
-#         return HTTPException(status_code=400, detail="Missing required fields: lat, lon.")
-
-#     total_days = int(math.floor(round(((24 * total_days) - hour_offset) / 24)))
-#     config = SystemConfig()
-#     jsonData = config.get_default_forecast_json()
-#     print("working it", jsonData)
-#     timeseries = model_service.get_point_forecast_timeseries(
-#         model=jsonData["model"],
-#         param_keys=jsonData["param_keys"],
-#         lat=lat,
-#         lon=lon,
-#         start_hour_offset=hour_offset,
-#         total_days=total_days,
-#         step_hours=jsonData["step_hours"],
-#     )
-#     print("GOT THIS BITCH", timeseries)
-#     if not timeseries:
-#         return JSONResponse(content=[], status_code=200)
-#     return JSONResponse(content=timeseries)
-#     return JSONResponse(content=jsonData)
-
 @app.post("/forecast")
 async def forecast_route(request: Request):
     """
@@ -364,6 +325,14 @@ async def forecast_route(request: Request):
 #———————————————————————————————
 # 1) the “pre-warm” worker
 #———————————————————————————————
+
+def run_workers():
+    try:
+        layer_cache.preload_slices()
+        layer_cache.preload_tiles()
+    except Exception as e:
+        print(f"Error in run_workers: {e}")
+
 async def _prewarm_loop(
     interval_s: float = 60.0,
 ):
@@ -376,7 +345,7 @@ async def _prewarm_loop(
                 # layer_cache.loadOffset();
                 await loop.run_in_executor(
                     None,
-                    lambda: layer_cache.preload_slices() #layer_cache.preload_to_local()
+                    lambda: run_workers() #layer_cache.preload_to_local()
                 )
             except Exception as exc:
                 logger.error(f"Pre-warm failed {exc}")
