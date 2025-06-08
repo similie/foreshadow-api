@@ -79,22 +79,6 @@ class MemoryLayerCache:
     def is_loading(self):
        return self._loading and self._init_run
 
-
-    # def preload(self):
-
-    #     if self._loading:
-    #         return
-
-    #     self._loading = True
-    #     workers = self.get_worker_count()
-    #     print(f"[MemoryLayerCache] Preloading {len(self.offsets)} offsets × {len(self.param_keys)} params using {workers} workers")
-    #     with ThreadPoolExecutor(max_workers=workers) as executor:
-    #         executor.map(self._preload_offset, self.offsets)
-
-    #     self._loading = False
-    #     self._init_run = False
-    #     print("[MemoryLayerCache] Preload complete.")
-
     def _cache_get(self, key: str) -> Optional[Any]:
         cached = self._cacheStore.get(key)
         if cached is not None:
@@ -191,47 +175,6 @@ class MemoryLayerCache:
         base_time = now.replace(minute=0, second=0, microsecond=0)
         return base_time
 
-    # def _get_ip_with_fallback(self, pk: str, off: int):
-    #     ip = self._get_cached_values(pk, off)
-    #     if not ip:
-    #         print(f"[Fetch] Missing {pk}@{off}")
-    #         self._preload_offset(off)
-    #         ip = self._get_cached_values(pk, off)
-    #         if not ip:
-    #             return None
-    #     return ip
-
-    # def apply_extras_details(self, records: list[Any]):
-    #     self.weather_utils.apply_extras_details(records)
-
-    # def get_current_slice(self, lat: float, lon: float, off: int):
-    #     dt = self._get_base_time() + timedelta(hours=off)
-    #     records: list[Any] = []
-    #     print(f"[Fetch] Computing offset={off} hour_key={off}")
-    #     for entry in self.param_keys:
-    #         pk = entry["param_key"]
-    #         ip = self._get_ip_with_fallback(pk, off)
-    #         if not ip:
-    #             continue
-    #         # ip = self._cache_get(key)
-    #         print(f"Processing value for {pk} {off}")
-
-    #         try:
-    #             val = float(ip(lat, lon))
-    #         except Exception as e:
-    #             print(f"[Fetch] Error {pk}@{off}: {e}")
-    #             continue
-    #         records.append((pk, {"datetime": dt.isoformat(), "value": val}))
-    #     # self.apply_extras_details(records)
-    #     return records
-
-    # def load_slices(self, off: int):
-    #     print(f"[Fetch] Computing offset={off} hour_key={off}")
-    #     for entry in self.param_keys:
-    #         pk = entry["param_key"]
-    #         self._get_ip_with_fallback(pk, off)
-    #         return (pk,off)
-    #
     def find_current_slice(self, lat: float, lon: float, hour_offset: int):
         values = []
         offset = self._find_closest_offset(hour_offset)
