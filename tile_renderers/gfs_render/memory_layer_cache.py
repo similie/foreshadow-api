@@ -162,7 +162,7 @@ class MemoryLayerCache:
             key_value.get("level"),
             key_value.get("typeOfLevel"),
             key_value.get("stepType"),
-            self._apply_search_tems(key_value, {"offset": offset})
+            self._apply_search_tems(key_value, {})
         )
         # print("I HAVE a new result here",result, key_name)
         # self._cacheStore.set(key, result, self._ttl_3)
@@ -364,7 +364,7 @@ class MemoryLayerCache:
         for value in values:
             date_time = datetime.fromisoformat(value["datetime"])
             day = date_time.day
-            midnight = offset_map[day]
+            midnight = offset_map.get(day, None)
             if midnight is None:
                 continue
             updated_value = value.copy()
@@ -463,7 +463,7 @@ class MemoryLayerCache:
                 param_key.get("level"),
                 param_key.get("typeOfLevel"),
                 param_key.get("stepType"),
-                self._apply_search_tems(param_key, search)
+                self._apply_search_tems(param_key, {"offset": offset})
             )
 
             if not self.preload_state:
