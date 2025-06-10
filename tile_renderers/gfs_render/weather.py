@@ -20,11 +20,12 @@ class WeatherUtils:
         """
         return math.hypot(u, v)
 
-    def get_wind_direction_values(self, records: List[Dict[str, Any]]):
+    def get_wind_speed_values(self, records: List[Dict[str, Any]]):
         u_series_details =  next(r for r in records if r["metadata"]["key"] == "10-metre-u-wind-component")
         v_series_details = next(r for r in records if r["metadata"]["key"] == "10-metre-v-wind-component")
-        meta = v_series_details["metadata"]
-        return (u_series_details, v_series_details, meta)
+        meta_v = v_series_details["metadata"]
+        meta_u = u_series_details["metadata"]
+        return (u_series_details, v_series_details, meta_v, meta_u)
 
     def generate_wind_direction_meta(self, meta: Dict[str, Any]):
         unit = "degrees"
@@ -60,7 +61,7 @@ class WeatherUtils:
 
     def apply_wind_direction_to_single(self, records: List[Dict[str, Any]]):
         try:
-            u_series_details, v_series_details, meta =  self.get_wind_direction_values(records)
+            u_series_details, v_series_details, meta_v, meta_u =  self.get_wind_speed_values(records)
             u_series = u_series_details["value"]
             v_series = v_series_details["value"]
         except StopIteration:
@@ -68,9 +69,9 @@ class WeatherUtils:
             return
 
         try:
-            max_speed = max([u_series_details.get("maximum", -9999), v_series_details.get("maximum", -9999)])
-            metadata_speed = self.generate_wind_speed_meta(meta, max_speed)
-            metadata = self.generate_wind_direction_meta(meta)
+            max_speed = self.wind_speed(meta_u["maximum"],  meta_v["maximum"])
+            metadata_speed = self.generate_wind_speed_meta(meta_v, max_speed)
+            metadata = self.generate_wind_direction_meta(meta_v)
             wd = self.wind_direction(u_series, v_series)
             ws = self.wind_speed(u_series, v_series)
             result = [{
@@ -84,7 +85,7 @@ class WeatherUtils:
                 "datetime": u_series_details["datetime"],
                 "unit": metadata_speed["parameterUnits"]
             }]
-            records.append(*result)
+            records += result
         except Exception as e:
             print('Single wind-direction failure', e)
 
@@ -98,19 +99,20 @@ class WeatherUtils:
         """
         # Locate u- and v- component series
         try:
-            u_series_details, v_series_details, meta =  self.get_wind_direction_values(records)
+            u_series_details, v_series_details, meta_v, meta_u =  self.get_wind_speed_values(records)
             u_series = u_series_details["values"]
             v_series = v_series_details["values"]
         except StopIteration:
             # If either component is missing, nothing to do
             return
 
-        max_speed = max([*[item["maximum"] for item in u_series], *[item["maximum"] for item in v_series]])
-        metadata = self.generate_wind_direction_meta(meta)
-        metadata_speed = self.generate_wind_speed_meta(meta, max_speed)
+
         # Build quick lookup by datetime
         # Compute direction for each timestamp present in both
         try:
+            max_speed = self.wind_speed(meta_u["maximum"],  meta_v["maximum"])
+            metadata = self.generate_wind_direction_meta(meta_v)
+            metadata_speed = self.generate_wind_speed_meta(meta_v, max_speed)
             u_map = {item["datetime"]: (item["value"],item["offset"]) for item in u_series}
             v_map = {item["datetime"]: (item["value"],item["offset"]) for item in v_series}
 
@@ -132,22 +134,22 @@ class WeatherUtils:
                     "hour": hour
                 }
                 direction_values.append({
-                    "value": round(wd, 3),
+                    "value": wd,
                     **details
                 })
                 speed_values.append({
-                    "value": round(ws, 3),
+                    "value": ws,
                     **details
                 })
 
             # Append the new timeseries
-            records.append(*[{
+            records += [{
                 "values": direction_values,
                 "metadata": metadata
             }, {
                 "values": speed_values,
                 "metadata": metadata_speed
-            }])
+            }]
 
         except Exception as e:
             print("ERROR: Weather.apply_extras_details", e)

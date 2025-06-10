@@ -38,7 +38,7 @@ class MemoryLayerCache:
         self._ttl = CACHE_TTL
         self._ttl_3 = self._ttl * 3
         self._ttl_local = self._ttl + (11 + 60)
-
+        self.round_value = 4
 
     def get_worker_count(self):
         # max_cores = 24
@@ -223,6 +223,8 @@ class MemoryLayerCache:
     ):
         self.weather_utils.apply_wind_direction_to_single(results)
         self.normalize_precipitation_24h_slice(results, offset, lat, lon)
+        for r in results:
+            r["value"] = round(r["value"], self.round_value)
         return sorted(
             results,
             key=lambda item: item["metadata"]["key"]
@@ -311,6 +313,9 @@ class MemoryLayerCache:
         lon: float) -> List[Dict[str, Any]]:
         self.normalize_precipitation_24h(slice_results, lat, lon)
         self.weather_utils.apply_extras_details(slice_results, lat, lon)
+        for result in slice_results:
+            for r in result.get("values", []):
+                r["value"] = round(r["value"], self.round_value)
         return sorted(
             slice_results,
             key=lambda item: item["metadata"]["key"]
