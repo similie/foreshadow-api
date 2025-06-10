@@ -162,7 +162,7 @@ class MemoryLayerCache:
             key_value.get("level"),
             key_value.get("typeOfLevel"),
             key_value.get("stepType"),
-            self._apply_search_tems(key_value, {"offset": offset})
+            self._apply_search_tems(key_value, {})
         )
         # print("I HAVE a new result here",result, key_name)
         # self._cacheStore.set(key, result, self._ttl_3)
@@ -370,7 +370,7 @@ class MemoryLayerCache:
         for value in values:
             date_time = datetime.fromisoformat(value["datetime"])
             day = date_time.day
-            midnight = offset_map[day]
+            midnight = offset_map.get(day, None)
             if midnight is None:
                 continue
             updated_value = value.copy()
@@ -387,6 +387,29 @@ class MemoryLayerCache:
             None
         )
         return tp_def.copy() if tp_def is not None else None
+
+    def pull_specific_records(self, name: str, records: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        return next(
+            (block for block in records.copy() if  block["metadata"].get("key") == name),
+            None
+        )
+
+    def daily_precipitation_meta(self, records: List[Dict[str, Any]]):
+        total_precipitation = self.pull_specific_records("total-precipitation", records)
+        backup_meta = {"key": "total-precipitation",
+        "parameterName": "Total Precipitation",}
+        if total_precipitation is None:
+            total_precipitation = dict({
+                "metadata": backup_meta
+            })
+
+        meta = total_precipitation.get("metadata" , backup_meta)
+        return {
+            **meta,
+            "key": f"daily-{meta.get("key", "total-precipitation")}",
+            "shortName": "dtp",
+            "parameterName": f"Daily {meta.get("parameterName", "Total Precipitation")}"
+        }
 
     def normalize_precipitation_24h(
             self,
@@ -419,24 +442,16 @@ class MemoryLayerCache:
                 return
 
             try:
-                total_precipitation = next(
-                    (block for block in slice_results.copy() if  block["metadata"].get("key") == "total-precipitation"),
-                    None
-                )
+                total_precipitation = self.pull_specific_records("total-precipitation", slice_results)
                 if not total_precipitation:
                     return
                 precitation_values = total_precipitation["values"].copy()
                 midnight_values = self.get_midnight_values(precitation_values, tp_def, lat, lon)
                 values = self.apply_24_values(midnight_values, precitation_values)
-                meta = total_precipitation["metadata"].copy()
+                # meta = total_precipitation["metadata"].copy()
                 precip_24 = {
                     "values": values,
-                    "metadata": {
-                        **meta,
-                        "key": f"daily-{meta.get("key", "total-precipitation")}",
-                        "shortName": "dtp",
-                        "parameterName": f"Daily {meta.get("parameterName", "Total Precipitation")}"
-                    }
+                    "metadata": self.daily_precipitation_meta(slice_results)
                 }
                 slice_results.append(precip_24)
             except Exception as e:
@@ -469,7 +484,7 @@ class MemoryLayerCache:
                 param_key.get("level"),
                 param_key.get("typeOfLevel"),
                 param_key.get("stepType"),
-                self._apply_search_tems(param_key, search)
+                self._apply_search_tems(param_key, {"offset": offset})
             )
 
             if not self.preload_state:
@@ -530,7 +545,6 @@ class MemoryLayerCache:
                     values[param_key.get("key", key_name)] = result
             except Exception as e:
                 print(f"ERROR {e}")
-
             return values
         # self.get_worker_count()
         workers = self.get_worker_count()
