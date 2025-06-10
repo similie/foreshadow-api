@@ -235,13 +235,16 @@ class MemoryLayerCache:
         # # Later you populate sendResults["metadata"] = { ... }
         # sendResults["metadata"] = {"forecastStart": 999, "forecastEnd": 0, ...}
         # forecast_time = ...  # some integer or float
-        meta = sendResults["metadata"]  # Pyright now knows `meta` is Dict[str, Any]
-        # because we've annotated sendResults above.
-        if meta["forecastStart"] > forecast_time:
-            meta["forecastStart"] = forecast_time
+        try:
+            meta: dict[str, Any] = sendResults.get("metadata", {"forecastStart": 9999, "forecastEnd": -9999 })
+            print("What is happening", meta, meta["forecastStart"], )
+            if meta["forecastStart"] > forecast_time:
+                sendResults["metadata"]["forecastStart"] = forecast_time
 
-        if meta["forecastEnd"] < forecast_time:
-            meta["forecastEnd"] = forecast_time
+            if meta["forecastEnd"] < forecast_time:
+                sendResults["metadata"]["forecastEnd"] = forecast_time
+        except Exception as e:
+            print('Offset appending error', e)
 
     def find_slice(self, lat: float, lon: float, start_hour_offset = 0):
         values = []
@@ -249,14 +252,15 @@ class MemoryLayerCache:
         offsets = [off for off in self.offsets_primary if off >= 0]
         offsets = offsets[offsets.index(offset):]
         def _compute_for_offset(key_value: Any):
-            sendResults = {"values" : []}
+            sendResults: dict[str, Any] = {"values" : []}
             try:
                 for off in offsets:
                     result = self._get_cached_values(key_value, off)
                     if not result:
                         continue
                     data_array, lat_array, lon_array, meta_dict, _off = result
-                    forecast_time = meta_dict.get("forecastTime", off)
+                    forecast_time = meta_dict.get("forecastTime", _off)
+                    print("I HAVE THESE FORECAST TIMERS", _off, off, forecast_time)
                     # if not 'units' in sendResults:
                     #     sendResults["unit"] = meta_dict.get("parameterUnits", "unknown")
                     if not 'metadata' in sendResults:
@@ -266,13 +270,15 @@ class MemoryLayerCache:
                         sendResults["metadata"]["forecastEnd"] = forecast_time
                     val = self.model_service.interpolate_value(data_array, lat_array, lon_array, lat, lon)
                     date_time = self.model_service._build_valid_datetime_from_metadata(meta_dict, off)
+                    self._append_start_end(sendResults, forecast_time)
                     sendResults["values"].append({
                         "value": val,
                         "datetime": date_time.isoformat(),
                         "offset": off,
+                        "selected_offset": _off,
                         "hour": date_time.hour
                     })
-                    self._append_start_end(sendResults, forecast_time)
+                    # self._append_start_end(sendResults, forecast_time)
 
                 return sendResults
             except Exception as e:
