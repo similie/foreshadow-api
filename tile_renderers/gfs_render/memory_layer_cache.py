@@ -1,5 +1,6 @@
 import os
 import threading
+import bisect
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Any, Optional
 import logging
@@ -206,11 +207,17 @@ class MemoryLayerCache:
                 if not result:
                     continue
                 values.append(result)
-        return self.append_extras_to_current_offset(values)
+        return self.append_extras_to_current_offset(values, offset, lat, lon)
 
-    def append_extras_to_current_offset(self, results: List[Dict[str, Any]] ):
+    def append_extras_to_current_offset(
+        self,
+        results: List[Dict[str, Any]],
+        offset: int,
+        lat: float,
+        lon: float
+    ):
         self.weather_utils.apply_wind_direction_to_single(results)
-
+        self.normalize_precipitation_24h_slice(results, offset, lat, lon)
         return sorted(
             results,
             key=lambda item: item["metadata"]["key"]
@@ -289,19 +296,20 @@ class MemoryLayerCache:
         for block in values:
             block["values"].sort(key=lambda x: x["datetime"])
 
-        return self.append_special_slices_values(sorted(
-            values,
-            key=lambda item: item["metadata"]["key"]
-        ), lat, lon)
+        return self.append_special_slices_values(values, offset, lat, lon)
 
     def append_special_slices_values(
         self,
         slice_results: List[Dict[str, Any]],
+        offset: int,
         lat: float,
         lon: float) -> List[Dict[str, Any]]:
         self.normalize_precipitation_24h(slice_results, lat, lon)
         self.weather_utils.apply_extras_details(slice_results, lat, lon)
-        return slice_results
+        return sorted(
+            slice_results,
+            key=lambda item: item["metadata"]["key"]
+        )
 
     def interplate_values_simple(self,  key_value: dict[str, Any], offset: int, lat: float, lon: float):
         result = self._get_cached_values(key_value, offset)
@@ -310,6 +318,49 @@ class MemoryLayerCache:
         data_array, lat_array, lon_array, meta_dict, off = result
         value = self.model_service.interpolate_value(data_array, lat_array, lon_array, lat, lon)
         return (value,meta_dict,off)
+
+    def find_prev_midnight(self, offset: int) -> Optional[int]:
+        """
+        midnights: a sorted list of integers like [-25, -1, 23, 47, ...]
+        offset:    an integer like 1 or 24 or any forecast‐hour
+        Returns the greatest m in midnights with m <= offset, or None if none.
+        """
+        mid_indices = self.generate_midnight_indices(offset, True)
+        # Ensure it’s sorted ascending
+
+        # Find insertion point to keep sorted order
+        idx = bisect.bisect_right(mid_indices, offset) - 1
+        if idx >= 0:
+            return mid_indices[idx]
+        return None
+
+    def normalize_precipitation_24h_slice(self, records: List[Dict[str, Any]], offset: int, lat:float, lon:float):
+       total_precipitation = self.pull_specific_records("total-precipitation", records)
+       if total_precipitation is None:
+           return
+
+       tp_def = self.get_param_key_layer("total-precipitation")
+       if tp_def is None:
+            return
+
+       current_val = total_precipitation["value"]
+       midnight_offset = self.find_prev_midnight(offset)
+       print("BOOMO", midnight_offset)
+       if midnight_offset is None:
+           return
+       value,meta_dict,off = self.interplate_values_simple(tp_def, offset, lat, lon)
+       if meta_dict is None:
+           return
+
+       precip_24 = {
+           "values": current_val - value,
+           "metadata": self.build_precipitation_meta(total_precipitation),
+           "datetime": total_precipitation["datetime"],
+           "unit": total_precipitation["unit"]
+       }
+       records.append(precip_24)
+
+
 
 
     def get_midnight_values(self, values: List[Dict[str, Any]], tp_def: Dict[str, Any], lat:float, lon:float):
@@ -327,13 +378,11 @@ class MemoryLayerCache:
         midnight_values: List[Dict[str, Any]] = []
         for offset in mid_indices:
             current_offset = offset_map.get(offset, None)
-            # print("GETTING FILTER", current_offset)
             if current_offset is not None:
                midnight_values.append(current_offset)
                continue
 
             value,meta_dict,off = self.interplate_values_simple(tp_def, offset, lat, lon)
-
             if meta_dict is None:
                continue
 
@@ -383,8 +432,7 @@ class MemoryLayerCache:
             None
         )
 
-    def daily_precipitation_meta(self, records: List[Dict[str, Any]]):
-        total_precipitation = self.pull_specific_records("total-precipitation", records)
+    def build_precipitation_meta(self, total_precipitation: Dict[str, Any]):
         backup_meta = {"key": "total-precipitation",
         "parameterName": "Total Precipitation",}
         if total_precipitation is None:
@@ -399,6 +447,12 @@ class MemoryLayerCache:
             "shortName": "dtp",
             "parameterName": f"Daily {meta.get("parameterName", "Total Precipitation")}"
         }
+
+    def daily_precipitation_meta(self, records: List[Dict[str, Any]]):
+        total_precipitation = self.pull_specific_records("total-precipitation", records)
+        if total_precipitation is None:
+            return None
+        return self.build_precipitation_meta(total_precipitation)
 
     def normalize_precipitation_24h(
             self,
