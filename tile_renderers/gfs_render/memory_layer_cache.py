@@ -151,8 +151,8 @@ class MemoryLayerCache:
         if self._localStorage.available(key):
             self._localStorage.extend(key, self._ttl_local);
             return self._localStorage.get(key)
-
-        grbs = self.model_service._get_raw_grib(self.model, offset)
+        search  = {}
+        grbs = self.model_service._get_raw_grib(self.model, offset, search)
         result = self.model_service._set_cached_grib_values(
             grbs,
             key_name,
@@ -161,7 +161,7 @@ class MemoryLayerCache:
             key_value.get("level"),
             key_value.get("typeOfLevel"),
             key_value.get("stepType"),
-            self._apply_search_tems(key_value, {})
+            self._apply_search_tems(key_value, search)
         )
         # self._cacheStore.set(key, result, self._ttl_3)
         self._localStorage.set(key, result, self._ttl_local)
@@ -345,7 +345,6 @@ class MemoryLayerCache:
 
        current_val = total_precipitation["value"]
        midnight_offset = self.find_prev_midnight(offset)
-       print("BOOMO", midnight_offset)
        if midnight_offset is None:
            return
        value,meta_dict,off = self.interplate_values_simple(tp_def, offset, lat, lon)
@@ -353,10 +352,10 @@ class MemoryLayerCache:
            return
 
        precip_24 = {
-           "values": current_val - value,
+           "unit": total_precipitation["unit"],
            "metadata": self.build_precipitation_meta(total_precipitation),
+           "value": current_val - value,
            "datetime": total_precipitation["datetime"],
-           "unit": total_precipitation["unit"]
        }
        records.append(precip_24)
 
