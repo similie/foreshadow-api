@@ -133,8 +133,6 @@ class MemoryLayerCache:
                 self._localStorage.set(expire_key, True, self._ttl_3)
             except Exception as e:
                 logger.error(f"Error setting cache key {key}: {e}")
-            # with self._lock:
-            #     self._cache[(pk, hour_key)] = ip
         print(f"[Preload] Completed offset {off}")
 
     def _get_cached_values(self, key_value: dict[str, Any], offset: int ):
@@ -164,7 +162,6 @@ class MemoryLayerCache:
             key_value.get("stepType"),
             self._apply_search_tems(key_value, {})
         )
-        # print("I HAVE a new result here",result, key_name)
         # self._cacheStore.set(key, result, self._ttl_3)
         self._localStorage.set(key, result, self._ttl_local)
         return result
@@ -183,9 +180,6 @@ class MemoryLayerCache:
         def _compute_for_offset(key_value: Any):
             sendResults = {}
             try:
-                # key_name: str = key_value.get("param_key")
-                # for off in offsets:
-                # key = self._get_cache_key(key_name, offset)
                 result = self._get_cached_values(key_value, offset)
                 if not result:
                     return None
@@ -202,8 +196,6 @@ class MemoryLayerCache:
             except Exception as e:
                 print(f"ERROR {e}")
 
-
-        # self.get_worker_count()
         with ThreadPoolExecutor(max_workers=self.get_worker_count()) as exe:
             cfg = SystemConfig().get_default_forecast_json()
             param_keys = cfg["param_keys"]
@@ -214,8 +206,13 @@ class MemoryLayerCache:
                 if not result:
                     continue
                 values.append(result)
+        return self.append_extras_to_current_offset(values)
+
+    def append_extras_to_current_offset(self, results: List[Dict[str, Any]] ):
+        self.weather_utils.apply_wind_direction_to_single(results)
+
         return sorted(
-            values,
+            results,
             key=lambda item: item["metadata"]["key"]
         )
 
@@ -225,26 +222,19 @@ class MemoryLayerCache:
         offsets = [off for off in self.offsets_primary if off >= 0]
         if offset in offsets:
             return offset
-
         closest_offset = min(offsets, key=lambda x: abs(x - offset))
         return closest_offset
 
     def _append_start_end(self, sendResults: Dict[str, Any], forecast_time: int) -> None:
-        # 1. Tell Pyright that sendResults is Dict[str, Any]
-        # sendResults: Dict[str, Any] = {}
-        # # Later you populate sendResults["metadata"] = { ... }
-        # sendResults["metadata"] = {"forecastStart": 999, "forecastEnd": 0, ...}
-        # forecast_time = ...  # some integer or float
         try:
             meta: dict[str, Any] = sendResults.get("metadata", {"forecastStart": 9999, "forecastEnd": -9999 })
-            print("What is happening", meta, meta["forecastStart"], )
             if meta["forecastStart"] > forecast_time:
                 sendResults["metadata"]["forecastStart"] = forecast_time
 
             if meta["forecastEnd"] < forecast_time:
                 sendResults["metadata"]["forecastEnd"] = forecast_time
         except Exception as e:
-            print('Offset appending error', e)
+            print('Offset append error', e)
 
     def find_slice(self, lat: float, lon: float, start_hour_offset = 0):
         values = []
@@ -260,7 +250,6 @@ class MemoryLayerCache:
                         continue
                     data_array, lat_array, lon_array, meta_dict, _off = result
                     forecast_time = meta_dict.get("forecastTime", _off)
-                    print("I HAVE THESE FORECAST TIMERS", _off, off, forecast_time)
                     # if not 'units' in sendResults:
                     #     sendResults["unit"] = meta_dict.get("parameterUnits", "unknown")
                     if not 'metadata' in sendResults:
