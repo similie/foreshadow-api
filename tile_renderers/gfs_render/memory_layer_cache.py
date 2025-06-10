@@ -276,7 +276,7 @@ class MemoryLayerCache:
                         "value": val,
                         "datetime": date_time.isoformat(),
                         "offset": off,
-                        "selected_offset": _off,
+                        "day": date_time.day,
                         "hour": date_time.hour
                     })
                     # self._append_start_end(sendResults, forecast_time)
@@ -395,6 +395,7 @@ class MemoryLayerCache:
                 "value": value,
                 "datetime": datetime.isoformat(),
                 "offset": off,
+                "day": datetime.day,
                 "hour": datetime.hour
             })
         return [r for r in midnight_values if r.get("hour", -1) == 0]

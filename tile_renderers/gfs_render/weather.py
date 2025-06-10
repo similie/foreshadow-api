@@ -1,5 +1,6 @@
 import math
-from typing import Dict, List, Any, Optional
+from datetime import datetime
+from typing import Dict, List, Any
 class WeatherUtils:
 
     def wind_direction(self, u: float, v: float) -> float:
@@ -76,18 +77,22 @@ class WeatherUtils:
         # Build quick lookup by datetime
         # Compute direction for each timestamp present in both
         try:
-            u_map = {item["datetime"]: item["value"] for item in u_series}
-            v_map = {item["datetime"]: item["value"] for item in v_series}
+            u_map = {item["datetime"]: (item["value"],item["offset"]) for item in u_series}
+            v_map = {item["datetime"]: (item["value"],item["offset"]) for item in v_series}
 
             direction_values = []
             for dt in sorted(set(u_map).intersection(v_map)):
-                u = u_map[dt]
-                v = v_map[dt]
+                u, u_off = u_map[dt]
+                v, v_off = v_map[dt]
                 # use your existing utility to get meteorological wind direction
                 wd = self.wind_direction(u, v)
+                date_time = datetime.fromisoformat(dt)
                 direction_values.append({
-                    "datetime": dt,
-                    "value": round(wd, 3)
+                    "value": round(wd, 3),
+                     "datetime": dt,
+                     "offset": v_off,
+                     "day": date_time.day,
+                     "hour": date_time.hour
                 })
 
             # Append the new timeseries
