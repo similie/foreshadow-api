@@ -105,7 +105,7 @@ class WeatherUtils:
             # If either component is missing, nothing to do
             return
 
-        max_speed = max([*[item["value"] for item in u_series], *[item["value"] for item in v_series]])
+        max_speed = max([*[item["maximum"] for item in u_series], *[item["maximum"] for item in v_series]])
         metadata = self.generate_wind_direction_meta(meta)
         metadata_speed = self.generate_wind_speed_meta(meta, max_speed)
         # Build quick lookup by datetime
