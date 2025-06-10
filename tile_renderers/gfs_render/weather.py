@@ -27,8 +27,8 @@ class WeatherUtils:
             "shortName": "wd",
             "typeOfLevel": meta["typeOfLevel"],
             "level": meta["level"],
-            "min": 0,
-            "max": 360,
+            "minimum": 0,
+            "maximum": 360,
             "name": "10 metre derrived wind direction",
             "stepType": meta["stepType"],
             "key": "10-metre-wind-direction"
