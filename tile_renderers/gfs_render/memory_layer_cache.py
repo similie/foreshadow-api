@@ -136,7 +136,7 @@ class MemoryLayerCache:
                 logger.error(f"Error setting cache key {key}: {e}")
         print(f"[Preload] Completed offset {off}")
 
-    def _get_cached_values(self, key_value: dict[str, Any], offset: int ):
+    def _get_cached_values(self, key_value: dict[str, Any], offset: int, no_process: bool = False ):
         """
         We super-charge caching, using a local memory layer with a redis-backed cache layer
         """
@@ -151,7 +151,12 @@ class MemoryLayerCache:
         if self._localStorage.available(key):
             self._localStorage.extend(key, self._ttl_local);
             return self._localStorage.get(key)
+
+        if no_process:
+            return None
+
         search  = {}
+        search["offset"] = offset
         grbs = self.model_service._get_raw_grib(self.model, offset, search)
         result = self.model_service._set_cached_grib_values(
             grbs,
@@ -312,7 +317,7 @@ class MemoryLayerCache:
         )
 
     def interplate_values_simple(self,  key_value: dict[str, Any], offset: int, lat: float, lon: float):
-        result = self._get_cached_values(key_value, offset)
+        result = self._get_cached_values(key_value, offset, True)
         if not result:
             return (None,None,offset)
         data_array, lat_array, lon_array, meta_dict, off = result
@@ -526,7 +531,7 @@ class MemoryLayerCache:
                 param_key.get("level"),
                 param_key.get("typeOfLevel"),
                 param_key.get("stepType"),
-                self._apply_search_tems(param_key, {"offset": offset})
+                self._apply_search_tems(param_key, search)
             )
 
             if not self.preload_state:
