@@ -382,6 +382,29 @@ class MemoryLayerCache:
         )
         return tp_def.copy() if tp_def is not None else None
 
+    def pull_specific_records(self, name: str, records: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        return next(
+            (block for block in records.copy() if  block["metadata"].get("key") == name),
+            None
+        )
+
+    def daily_precipitation_meta(self, records: List[Dict[str, Any]]):
+        total_precipitation = self.pull_specific_records("total-precipitation", records)
+        backup_meta = {"key": "total-precipitation",
+        "parameterName": "Total Precipitation",}
+        if total_precipitation is None:
+            total_precipitation = dict({
+                "metadata": backup_meta
+            })
+
+        meta = total_precipitation.get("metadata" , backup_meta)
+        return {
+            **meta,
+            "key": f"daily-{meta.get("key", "total-precipitation")}",
+            "shortName": "dtp",
+            "parameterName": f"Daily {meta.get("parameterName", "Total Precipitation")}"
+        }
+
     def normalize_precipitation_24h(
             self,
             slice_results: List[Dict[str, Any]],
@@ -413,24 +436,16 @@ class MemoryLayerCache:
                 return
 
             try:
-                total_precipitation = next(
-                    (block for block in slice_results.copy() if  block["metadata"].get("key") == "total-precipitation"),
-                    None
-                )
+                total_precipitation = self.pull_specific_records("total-precipitation", slice_results)
                 if not total_precipitation:
                     return
                 precitation_values = total_precipitation["values"].copy()
                 midnight_values = self.get_midnight_values(precitation_values, tp_def, lat, lon)
                 values = self.apply_24_values(midnight_values, precitation_values)
-                meta = total_precipitation["metadata"].copy()
+                # meta = total_precipitation["metadata"].copy()
                 precip_24 = {
                     "values": values,
-                    "metadata": {
-                        **meta,
-                        "key": f"daily-{meta.get("key", "total-precipitation")}",
-                        "shortName": "dtp",
-                        "parameterName": f"Daily {meta.get("parameterName", "Total Precipitation")}"
-                    }
+                    "metadata": self.daily_precipitation_meta(slice_results)
                 }
                 slice_results.append(precip_24)
             except Exception as e:
@@ -524,7 +539,6 @@ class MemoryLayerCache:
                     values[param_key.get("key", key_name)] = result
             except Exception as e:
                 print(f"ERROR {e}")
-
             return values
         # self.get_worker_count()
         workers = self.get_worker_count()
