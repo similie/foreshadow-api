@@ -195,12 +195,19 @@ class ModelService:
             return float(vals[0])
         return float(sum(v * w for v, w in zip(vals, weights)) / total_w)
 
+    def fallback_time(self, fallback_offset: int) -> datetime:
+        # fallback: use current UTC hour, rounded to the top of the hour
+        now = datetime.now(timezone.utc)
+        base = now.replace(minute=0, second=0, microsecond=0)
+        return base + timedelta(hours=fallback_offset)
+
     def _build_valid_datetime_from_metadata(self, meta: Dict[str, Any], fallback_offset: int) -> datetime:
         data_date = meta.get("dataDate")
         data_time = meta.get("dataTime", 0)
         fcst_time = meta.get("forecastTime", fallback_offset)
         if not data_date:
-            return datetime.now(timezone.utc) + timedelta(hours=fallback_offset)
+            # fallback: use current UTC hour, rounded to the top of the hour
+            return self.fallback_time(fallback_offset)
         try:
             yyyymmdd = str(data_date)
             year = int(yyyymmdd[:4])
@@ -209,7 +216,7 @@ class ModelService:
             init_dt = datetime(year, month, day, data_time, 0, 0, tzinfo=timezone.utc)
             return init_dt + timedelta(hours=fcst_time)
         except Exception:
-            return datetime.now(timezone.utc) + timedelta(hours=fallback_offset)
+            return self.fallback_time(fallback_offset)
 
     # -------------------------------------------------------------------------
     # Basic GRIB Utilities

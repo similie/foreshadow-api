@@ -48,6 +48,10 @@ class TileRendering:
         try:
             grid_z = self.model_service.get_or_build_tile_grid(ip, pts, iterp_key, oversize)
             # timer.log("Built GridZ")
+            if grid_z is None:
+                logger.warning("No interpolator found => returning None.")
+                return None
+
             mask_sentinel = np.isclose(grid_z, missing_val, atol=1.0)
             grid_z[mask_sentinel] = np.nan
             if np.isnan(grid_z).all():
