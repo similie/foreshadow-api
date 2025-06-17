@@ -355,8 +355,8 @@ async def _prewarm_loop(
             try:
                 # layer_cache.loadOffset();
                 await loop.run_in_executor(
-                    prewarm_executor,
-                    lambda: run_workers() #layer_cache.preload_to_local()
+                   prewarm_executor,
+                   run_workers #layer_cache.preload_to_local()
                 )
             except Exception as exc:
                 logger.error(f"Pre-warm failed {exc}")
