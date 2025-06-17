@@ -43,7 +43,8 @@ def _bump_nice():
         os.nice(10)
     except Exception:
         pass
-
+def do_prewarm():
+    run_workers()
 prewarm_executor = ProcessPoolExecutor(
     max_workers=1,
     initializer=_bump_nice
@@ -356,7 +357,7 @@ async def _prewarm_loop(
                 # layer_cache.loadOffset();
                 await loop.run_in_executor(
                    prewarm_executor,
-                   run_workers #layer_cache.preload_to_local()
+                   do_prewarm #layer_cache.preload_to_local()
                 )
             except Exception as exc:
                 logger.error(f"Pre-warm failed {exc}")
