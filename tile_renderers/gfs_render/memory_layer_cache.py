@@ -455,7 +455,8 @@ class MemoryLayerCache:
             **meta,
             "key": f"daily-{meta.get("key", "total-precipitation")}",
             "shortName": "dtp",
-            "parameterName": f"Daily {meta.get("parameterName", "Total Precipitation")}"
+            "parameterName": f"Daily {meta.get("parameterName", "Total Precipitation")}",
+            "name": f"Daily Derived {meta.get("parameterName", "Total Precipitation")}"
         }
 
     def daily_precipitation_meta(self, records: List[Dict[str, Any]]):
@@ -615,7 +616,7 @@ class MemoryLayerCache:
     def _preload_param(self, entry: Dict[str, Any]) -> None:
         pk = entry["param_key"]
         logger.info(f"[Preload] Param={pk}")
-        for off in range(6):
+        for off in range(7):
             ip = self.model_service.get_or_build_interpolator(
                 self.model, pk, off,
                 entry.get("level"), entry.get("typeOfLevel"), entry.get("stepType")

@@ -37,7 +37,7 @@ class WeatherUtils:
             "level": meta["level"],
             "minimum": 0,
             "maximum": 360,
-            "name": "10 metre derrived wind direction",
+            "name": "10 metre derived wind direction",
             "stepType": meta["stepType"],
             "key": "10-metre-wind-direction"
         }
@@ -53,7 +53,7 @@ class WeatherUtils:
             "level": meta["level"],
             "minimum": 0,
             "maximum": max,
-            "name": "10 metre derrived wind speed",
+            "name": "10 metre derived wind speed",
             "stepType": meta["stepType"],
             "key": "10-metre-wind-speed"
         }

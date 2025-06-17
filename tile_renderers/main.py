@@ -35,8 +35,19 @@ load_dotenv(env_file, verbose=True)
 # Import your project modules (adjust paths as needed)
 from gfs_render import ModelService, RedisCacheBackend, TileRendering, MemoryLayerCache
 # from gfs_render.time_logger import TimeLogger
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
+def _bump_nice():
+    try:
+        # raise our niceness by 10 so this process is "nicer" (lower priority)
+        os.nice(10)
+    except Exception:
+        pass
 
+prewarm_executor = ProcessPoolExecutor(
+    max_workers=1,
+    initializer=_bump_nice
+)
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -344,7 +355,7 @@ async def _prewarm_loop(
             try:
                 # layer_cache.loadOffset();
                 await loop.run_in_executor(
-                    None,
+                    prewarm_executor,
                     lambda: run_workers() #layer_cache.preload_to_local()
                 )
             except Exception as exc:
