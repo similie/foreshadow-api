@@ -170,6 +170,7 @@ class MemoryLayerCache:
             self._apply_search_tems(key_value, search)
         )
         # self._cacheStore.set(key, result, self._ttl_3)
+        grbs.close() # type: ignore
         self._localStorage.set(key, result, self._ttl_local)
         return result
 
