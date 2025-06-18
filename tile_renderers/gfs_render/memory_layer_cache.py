@@ -598,6 +598,8 @@ class MemoryLayerCache:
                     if result is None:
                         continue
                     values[param_key.get("key", key_name)] = result
+
+                grbs.close() # type: ignore
             except Exception as e:
                 print(f"ERROR {e}")
             return values
