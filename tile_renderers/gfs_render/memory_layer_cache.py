@@ -42,8 +42,9 @@ class MemoryLayerCache:
 
     def get_worker_count(self):
         # max_cores = 24
-        cpu_count = math.ceil( (os.cpu_count() or 8 ) / 3)
-        return os.cpu_count() or 4 if self._init_run else cpu_count
+        system_cpu = os.cpu_count() or 4
+        cpu_count = math.ceil( system_cpu / 3)
+        return system_cpu if self._init_run else cpu_count
         #return cpu_count if cpu_count < max_cores else max_cores if cpu_count > max_cores else 4
     def _append_midnight_indices(self,range_hours: List[int]):
         max_hour = range_hours[-1]
