@@ -20,7 +20,17 @@ class LocalStorage:
 
         # Start cleanup thread (daemon so it won’t block program exit)
         self._cleaner_thread = threading.Thread(target=self._cleanup_thread, daemon=True)
-        self._cleaner_thread.start()
+        self._started = False
+    #  self._cleaner_thread.start()
+
+    def _enabled_threadstart(self):
+        if self._started:
+            return
+        with self._lock:
+            self._started = True
+            self._cleaner_thread.start()
+
+
 
     def available(self, key: str) -> bool:
         with self._lock:
@@ -37,6 +47,7 @@ class LocalStorage:
         Store `value` under `key`.  If expire > 0, the key will live for `expire` seconds.
         If expire == 0, key never expires (until manually deleted or overwritten).
         """
+
         with self._lock:
             self.data[key] = value
             if expire > 0:
@@ -46,6 +57,8 @@ class LocalStorage:
                 # If someone previously set a TTL, remove it (immortal now)
                 if key in self.data_time:
                     del self.data_time[key]
+
+        self._enabled_threadstart()
 
     def get(self, key: str) -> Optional[Any]:
         """
@@ -59,6 +72,7 @@ class LocalStorage:
                 self._delete_no_lock(key)
                 return None
             return self.data[key]
+        self._enabled_threadstart()
 
     def delete(self, key: str):
         """
@@ -66,6 +80,7 @@ class LocalStorage:
         """
         with self._lock:
             self._delete_no_lock(key)
+        self._enabled_threadstart()
 
     def extend(self, key: str, expire: int = 0):
         """
@@ -75,6 +90,7 @@ class LocalStorage:
         with self._lock:
             if key in self.data and expire > 0:
                 self._set_key_to_now(key, expire)
+        self._enabled_threadstart()
 
     def _is_expired(self, key: str) -> bool:
         """
