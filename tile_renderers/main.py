@@ -45,10 +45,14 @@ def _bump_nice():
         pass
 def do_prewarm():
     run_workers()
-prewarm_executor = ProcessPoolExecutor(
+
+
+prewarm_process_executor = ProcessPoolExecutor(
     max_workers=1,
     initializer=_bump_nice
 )
+
+prewarm_executor = ThreadPoolExecutor(max_workers=1)
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -63,6 +67,7 @@ layer_cache = MemoryLayerCache(
     model_service,
     backend_cache
 )
+
 
 
 app = FastAPI(title="Global Norm Map Server", version="1.0")
@@ -357,8 +362,12 @@ async def _prewarm_loop(
                 # layer_cache.loadOffset();
                 await loop.run_in_executor(
                    prewarm_executor,
-                   do_prewarm #layer_cache.preload_to_local()
+                   run_workers #layer_cache.preload_to_local()
                 )
+                # await loop.run_in_executor(
+                #    None,
+                #    lambda: run_workers() #layer_cache.preload_to_local()
+                # )
             except Exception as exc:
                 logger.error(f"Pre-warm failed {exc}")
             # wait before next one
