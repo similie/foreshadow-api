@@ -42,8 +42,8 @@ class MemoryLayerCache:
 
     def get_worker_count(self):
         # max_cores = 24
-        cpu_count = math.ceil( (os.cpu_count() or 8 ) / 2)
-        return cpu_count
+        cpu_count = math.ceil( (os.cpu_count() or 8 ) / 3)
+        return self._init_run if os.cpu_count() or 4 else cpu_count
         #return cpu_count if cpu_count < max_cores else max_cores if cpu_count > max_cores else 4
     def _append_midnight_indices(self,range_hours: List[int]):
         max_hour = range_hours[-1]
@@ -289,7 +289,7 @@ class MemoryLayerCache:
 
 
         # self.get_worker_count()
-        with ThreadPoolExecutor(max_workers=self.get_worker_count()) as exe:
+        with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as exe:
             cfg = SystemConfig().get_default_forecast_json()
             param_keys = cfg["param_keys"]
             futures = {exe.submit(_compute_for_offset, key): key for key in param_keys}
