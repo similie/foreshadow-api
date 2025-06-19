@@ -49,7 +49,7 @@ def do_prewarm():
 
 
 prewarm_process_executor = ProcessPoolExecutor(
-    max_workers=1,
+    max_workers=os.cpu_count() or 1,
     initializer=_bump_nice
 )
 
