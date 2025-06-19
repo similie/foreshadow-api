@@ -289,13 +289,10 @@ class MemoryLayerCache:
             except Exception as e:
                 print(f"ERROR {e}")
 
-
-        # self.get_worker_count()
         with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as exe:
             cfg = SystemConfig().get_default_forecast_json()
             param_keys = cfg["param_keys"]
             futures = {exe.submit(_compute_for_offset, key): key for key in param_keys}
-            # items = {}
             for fut in as_completed(futures):
                 result = fut.result()
                 if not result:
