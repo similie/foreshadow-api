@@ -355,18 +355,26 @@ async def _prewarm_loop(
     interval_s: float = 60.0,
 ):
     try:
-        loop = asyncio.get_running_loop()
+        # loop = asyncio.get_running_loop()
+        last_future = None
         while True:
             # pick random lat/lon in valid ranges
             print("PRELOAD EXECUTION STARTED")
             try:
+                if last_future is None or last_future.done():
+                    logger.info("Submitting new prewarm task")
+                    last_future = prewarm_process_executor.submit(run_workers)
+                else:
+                    logger.info("Previous prewarm still running, skipping this cycle")
+
+                # await asyncio.sleep(interval_s)
                 # layer_cache.loadOffset();
                 # await asyncio.to_thread(run_workers)
                 # await loop.run_in_executor(
                 #    prewarm_executor,
                 #    run_workers #layer_cache.preload_to_local()
                 # )
-                prewarm_process_executor.submit(do_prewarm)
+                # prewarm_process_executor.submit(do_prewarm)
                 # await loop.run_in_executor(
                 #    None,
                 #    lambda: run_workers() #layer_cache.preload_to_local()
