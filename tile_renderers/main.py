@@ -43,6 +43,7 @@ def _bump_nice():
         os.nice(10)
     except Exception:
         pass
+
 def do_prewarm():
     run_workers()
 
@@ -361,10 +362,11 @@ async def _prewarm_loop(
             try:
                 # layer_cache.loadOffset();
                 # await asyncio.to_thread(run_workers)
-                await loop.run_in_executor(
-                   prewarm_executor,
-                   run_workers #layer_cache.preload_to_local()
-                )
+                # await loop.run_in_executor(
+                #    prewarm_executor,
+                #    run_workers #layer_cache.preload_to_local()
+                # )
+                prewarm_process_executor.submit(do_prewarm)
                 # await loop.run_in_executor(
                 #    None,
                 #    lambda: run_workers() #layer_cache.preload_to_local()
