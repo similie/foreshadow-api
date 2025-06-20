@@ -2,13 +2,10 @@ import threading
 import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, List
+from .cache import ICacheBackend
 
-# import threading
-# import time
-# from datetime import datetime, timedelta
-# from typing import Any, Dict, Optional, List
 
-class LocalStorage:
+class LocalStorage(ICacheBackend):
     """
     A simple in‐memory key/value store with per‐key TTL.
     Keys added with expire=0 never expire (unless explicitly deleted).

@@ -20,12 +20,12 @@ class MemoryLayerCache:
     In-memory cache of interpolator layers for each (param_key, hour_offset).
     Preloads using ModelService.get_or_build_interpolator and serves full 5-day forecasts in memory.
     """
-    def __init__(self, model_service: ModelService, memory: ICacheBackend , preloader = False):
+    def __init__(self, model_service: ModelService, memory: ICacheBackend , local_storage: ICacheBackend = LocalStorage()):
         self.model_service = model_service
         cfg = SystemConfig().get_default_forecast_json()
         self.model = cfg["model"]
         self.param_keys = cfg["param_keys"]        # List[dict]
-        self.preload_state = preloader
+        self.preload_state = False
         self.load_offsets()
         self.weather_utils = WeatherUtils()
         self._cache: Dict[str, Any] = {}
@@ -34,7 +34,7 @@ class MemoryLayerCache:
         self._loading_tile = False
         self._init_run = True
         self._cacheStore = memory
-        self._localStorage = LocalStorage()
+        self._localStorage = local_storage
         self._ttl = CACHE_TTL
         self._ttl_3 = self._ttl * 3
         self._ttl_local = self._ttl + (11 + 60)

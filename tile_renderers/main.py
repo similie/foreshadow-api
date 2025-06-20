@@ -27,15 +27,33 @@ import asyncio
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv, find_dotenv
+from multiprocessing.managers import BaseManager
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from gfs_render import ModelService, RedisCacheBackend, TileRendering, MemoryLayerCache, LocalStorage
 
 env_file = find_dotenv()                     # returns path or ''
 print("Loading .env from:", env_file)
 load_dotenv(env_file, verbose=True)
 
+
+class CacheManager(BaseManager):
+    def LocalStorage(self) -> LocalStorage:  # noqa: F821
+        ...
+# NOTE: here we do *not* register the implementation class,
+# we only declare that `LocalStorage` will exist on the server side.
+CacheManager.register("LocalStorage")
+
+# Point to the same address/authkey you used above:
+_mgr = CacheManager(address=('127.0.0.1', 50000), authkey=b'secret')
+_mgr.connect()  # join the remote manager, do not start a new server
+
+# Grab the shared LocalStorage proxy:
+_shared_local_storage = _mgr.LocalStorage()
+
 # Import your project modules (adjust paths as needed)
-from gfs_render import ModelService, RedisCacheBackend, TileRendering, MemoryLayerCache
+
 # from gfs_render.time_logger import TimeLogger
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+
 
 def _bump_nice():
     try:
@@ -66,7 +84,8 @@ tile_renderer = TileRendering(model_service)
 
 layer_cache = MemoryLayerCache(
     model_service,
-    backend_cache
+    backend_cache,
+    _shared_local_storage
 )
 
 
@@ -399,7 +418,7 @@ def start_prewarm():
 @app.on_event("startup")
 async def kick_off_prewarm():
     print("GETTING STARTING WITH PREWARMING")
-    start_prewarm()
+    # start_prewarm()
 ###############################################################################
 # Main entry point
 ###############################################################################
