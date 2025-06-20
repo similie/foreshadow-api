@@ -21,7 +21,6 @@ model_service = ModelService(backend_cache)
 layer_cache = MemoryLayerCache(
     model_service,
     backend_cache,
-    True
 )
 
 async def _prewarm_loop(
