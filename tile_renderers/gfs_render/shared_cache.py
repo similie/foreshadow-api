@@ -1,12 +1,13 @@
 import time
 from multiprocessing.managers import BaseManager
-from gfs_render.caching.local_cache import LocalStorage
-from gfs_render import ModelService, RedisCacheBackend
-from gfs_render.memory_layer_cache import MemoryLayerCache
 
+from .model_service import ModelService
+from .memory_layer_cache import MemoryLayerCache
+from .caching.redis_cache import RedisCacheBackend
+from .caching.local_cache import LocalStorage
 # 1) Define & start the Manager
 class CacheManager(BaseManager):
-    def LocalStorage(self) -> LocalStorage:  # noqa: F821
+    def LocalStorage(self) -> LocalStorage:
             ...
 
 CacheManager.register("LocalStorage", LocalStorage)
@@ -20,7 +21,7 @@ def main():
 
     # 3) Build your model+cache exactly once
     backend = RedisCacheBackend()
-    service = ModelService(backend)
+    service = ModelService(backend, shared_store)
     memory = MemoryLayerCache(
         model_service=service,
         memory=backend,  # if you want full layered offsets

@@ -79,7 +79,7 @@ logger = logging.getLogger(__name__)
 # Initialize the cache backend and ModelService.
 backend_cache = RedisCacheBackend()
 # Set preload_layers=True if you want to prewarm interpolators on startup.
-model_service = ModelService(backend_cache)
+model_service = ModelService(backend_cache, _shared_local_storage)
 tile_renderer = TileRendering(model_service)
 
 layer_cache = MemoryLayerCache(
