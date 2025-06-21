@@ -27,32 +27,13 @@ import asyncio
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv, find_dotenv
-from multiprocessing.managers import BaseManager
+
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from gfs_render import ModelService, RedisCacheBackend, TileRendering, MemoryLayerCache, LocalStorage
 
 env_file = find_dotenv()                     # returns path or ''
 print("Loading .env from:", env_file)
 load_dotenv(env_file, verbose=True)
-
-
-class CacheManager(BaseManager):
-    def LocalStorage(self) -> LocalStorage:  # noqa: F821
-        ...
-# NOTE: here we do *not* register the implementation class,
-# we only declare that `LocalStorage` will exist on the server side.
-CacheManager.register("LocalStorage")
-
-# Point to the same address/authkey you used above:
-_mgr = CacheManager(address=('127.0.0.1', 50000), authkey=b'secret')
-_mgr.connect()  # join the remote manager, do not start a new server
-
-# Grab the shared LocalStorage proxy:
-_shared_local_storage = _mgr.LocalStorage()
-
-# Import your project modules (adjust paths as needed)
-
-# from gfs_render.time_logger import TimeLogger
 
 
 def _bump_nice():
@@ -75,17 +56,14 @@ prewarm_executor = ThreadPoolExecutor(max_workers=1)
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
-
 # Initialize the cache backend and ModelService.
+local_cache = LocalStorage()
 backend_cache = RedisCacheBackend()
 # Set preload_layers=True if you want to prewarm interpolators on startup.
-model_service = ModelService(backend_cache)
+model_service = ModelService(backend_cache, local_cache)
 tile_renderer = TileRendering(model_service)
-
 layer_cache = MemoryLayerCache(
-    model_service,
-    backend_cache,
-    _shared_local_storage
+    model_service
 )
 
 
@@ -355,7 +333,6 @@ async def forecast_route(request: Request):
         type_of_level=user_tof,
         step_type=step_type
     )
-    print("MY TIME SERIES", timeseries)
     if not timeseries:
         return JSONResponse(content=[], status_code=200)
     return JSONResponse(content=timeseries)
@@ -367,6 +344,7 @@ def run_workers():
     try:
         layer_cache.preload_slices()
         layer_cache.preload_tiles()
+        layer_cache.set_initialized()
     except Exception as e:
         print(f"Error in run_workers: {e}")
 
@@ -374,15 +352,20 @@ async def _prewarm_loop(
     interval_s: float = 60.0,
 ):
     try:
-        # loop = asyncio.get_running_loop()
+
         last_future = None
         while True:
             # pick random lat/lon in valid ranges
             print("PRELOAD EXECUTION STARTED")
             try:
                 if last_future is None or last_future.done():
+                    loop = asyncio.get_running_loop()
                     logger.info("Submitting new prewarm task")
-                    last_future = prewarm_process_executor.submit(run_workers)
+                    # last_future =  prewarm_process_executor.submit(run_workers)
+                    last_future =  loop.run_in_executor(
+                        prewarm_executor,
+                        run_workers #layer_cache.preload_to_local()
+                    )
                 else:
                     logger.info("Previous prewarm still running, skipping this cycle")
 
@@ -408,6 +391,8 @@ async def _prewarm_loop(
         logger.critical(f"_prewarm_loop has died with: {outer_exc}", exc_info=True)
         start_prewarm()
 
+
+
 def start_prewarm():
     print("GETTING STARTING WITH PREWARMING")
     loop = asyncio.get_running_loop()
@@ -418,7 +403,7 @@ def start_prewarm():
 @app.on_event("startup")
 async def kick_off_prewarm():
     print("GETTING STARTING WITH PREWARMING")
-    # start_prewarm()
+    start_prewarm()
 ###############################################################################
 # Main entry point
 ###############################################################################

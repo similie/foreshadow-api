@@ -34,9 +34,9 @@ logger = logging.getLogger(__name__)
 DEBOUNCE_INTERVAL = 0.3  # debounce period in seconds
 
 class InterpolatorCachingService:
-    def __init__(self, cache_backend: ICacheBackend):
+    def __init__(self, cache_backend: ICacheBackend, local_cache: ICacheBackend):
         self.cache = cache_backend
-        self.local_cache = LocalStorage()
+        self.local_cache = local_cache
         self.debounce_lock = Lock()
         # Maps key -> (latest_interpolator, timer)
         self.debounce_map = {}
@@ -99,9 +99,10 @@ class ModelService:
       - Parallel tasks like prewarming.
     """
 
-    def __init__(self, cache_backend: ICacheBackend) -> None:
+    def __init__(self, cache_backend: ICacheBackend, local_cache: ICacheBackend = LocalStorage()) -> None:
         self.config = SystemConfig()
         self.cache = cache_backend
+        self.local_cache = local_cache
         self.concurrency = ConcurrencyService()
         self.key_locks: Dict[str, threading.Lock] = {}
         self.metadata_cache: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
@@ -112,7 +113,7 @@ class ModelService:
         self.transformer = Transformer.from_crs("epsg:4326", "epsg:3857", always_xy=True)
         self.colors = MapColors()
         self.interpolator = Interpolator(self.transformer)
-        self.interpolator_cache = InterpolatorCachingService(cache_backend)
+        self.interpolator_cache = InterpolatorCachingService(self.cache, self.local_cache)
 
         # self._preload_all_grib_data()
     def get_or_build_tile_grid(self, ip, pts: np.ndarray, tile_key: str, oversize: int = 257) -> Optional[np.ndarray]:

@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 # from gfs_render import ModelService, SystemConfig, LocalStorage
 from .model_service import ModelService
 from .system_config import SystemConfig
-from .caching.local_cache import LocalStorage
+# from .caching.local_cache import LocalStorage
 from .weather import WeatherUtils
 import pickle
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class MemoryLayerCache:
     In-memory cache of interpolator layers for each (param_key, hour_offset).
     Preloads using ModelService.get_or_build_interpolator and serves full 5-day forecasts in memory.
     """
-    def __init__(self, model_service: ModelService, memory: ICacheBackend , local_storage: ICacheBackend = LocalStorage()):
+    def __init__(self, model_service: ModelService):
         self.model_service = model_service
         cfg = SystemConfig().get_default_forecast_json()
         self.model = cfg["model"]
@@ -33,8 +33,8 @@ class MemoryLayerCache:
         self._loading = False
         self._loading_tile = False
         self._init_run = True
-        self._cacheStore = memory
-        self._localStorage = local_storage
+        self._cacheStore:ICacheBackend = model_service.cache
+        self._localStorage:ICacheBackend = model_service.local_cache
         self._ttl = CACHE_TTL
         self._ttl_3 = self._ttl * 3
         self._ttl_local = self._ttl + (11 + 60)
@@ -566,6 +566,9 @@ class MemoryLayerCache:
             off += 24
         return mids
 
+    def set_initialized(self):
+        print("Preloader finished")
+        self._init_run = False
 
     def preload_slices(self):
         if self._loading:
@@ -611,7 +614,7 @@ class MemoryLayerCache:
                 print(f"PRELOAD EXECUTION COMPLETED {total_length} of {length}")
 
         self._loading = False
-        self._init_run = False
+
         print("Preload completed")
 
     def _preload_param(self, entry: Dict[str, Any]) -> None:
