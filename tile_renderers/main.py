@@ -19,6 +19,7 @@ import json
 import os
 import io
 import logging
+import random
 from typing import  List, Optional, Union
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
@@ -373,10 +374,13 @@ async def _prewarm_loop(
                 # )
             except Exception as exc:
                 logger.error(f"Pre-warm failed {exc}")
-            # wait before next one
-            #
-            print("PRELOAD EXECUTION COMPLETE")
-            await asyncio.sleep(interval_s)
+            # We do this so if a multi-process server instance
+            # we do not have all of our pre-warmers running at the same time
+            choice = random.randint(0, 5)
+            spread_time = choice * 60
+            sleep = interval_s + spread_time
+            print("Sleeping for ", sleep / 60)
+            await asyncio.sleep(sleep)
     except Exception as outer_exc:
         logger.critical(f"_prewarm_loop has died with: {outer_exc}", exc_info=True)
         start_prewarm()
