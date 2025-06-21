@@ -396,7 +396,8 @@ async def _prewarm_loop(
 def start_prewarm():
     print("GETTING STARTING WITH PREWARMING")
     loop = asyncio.get_running_loop()
-    loop.create_task(_prewarm_loop(600.0))
+    # run every 30 minutes
+    loop.create_task(_prewarm_loop(600.0 * 3))
 #———————————————————————————————
 # 2) start it on app startup
 #———————————————————————————————

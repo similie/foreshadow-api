@@ -20,7 +20,7 @@ class MemoryLayerCache:
     In-memory cache of interpolator layers for each (param_key, hour_offset).
     Preloads using ModelService.get_or_build_interpolator and serves full 5-day forecasts in memory.
     """
-    def __init__(self, model_service: ModelService):
+    def __init__(self, model_service: ModelService, no_mem = False):
         self.model_service = model_service
         cfg = SystemConfig().get_default_forecast_json()
         self.model = cfg["model"]
@@ -39,6 +39,7 @@ class MemoryLayerCache:
         self._ttl_3 = self._ttl * 3
         self._ttl_local = self._ttl + (11 + 60)
         self.round_value = 4
+        self.no_mem = no_mem
 
     def get_worker_count(self):
         # max_cores = 24
@@ -92,6 +93,9 @@ class MemoryLayerCache:
         return None
 
     def _cache_set(self, key: str, value: Any) -> None:
+        if self.no_mem:
+            return
+
         try:
             self._cacheStore.set(key, pickle.dumps(value, protocol=4), expire=self._ttl)
         except Exception as e:

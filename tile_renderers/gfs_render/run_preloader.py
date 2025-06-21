@@ -5,6 +5,7 @@ import asyncio
 from .model_service import ModelService
 from .caching.redis_cache import RedisCacheBackend
 from .memory_layer_cache import MemoryLayerCache
+
 from dotenv import load_dotenv, find_dotenv
 env_file = find_dotenv()                     # returns path or ''
 print("Loading .env from:", env_file)
@@ -20,9 +21,16 @@ model_service = ModelService(backend_cache)
 
 layer_cache = MemoryLayerCache(
     model_service,
-    backend_cache,
     True
 )
+
+def run_preloader():
+    try:
+        layer_cache.preload_slices()
+        layer_cache.preload_slices()
+        layer_cache.set_initialized()
+    except Exception as exc:
+        logger.error(f"Run Preloader failed {exc}")
 
 async def _prewarm_loop(
     interval_s: float = 60.0,
@@ -32,10 +40,10 @@ async def _prewarm_loop(
         # pick random lat/lon in valid ranges
         print("Running preloader...")
         try:
-            # layer_cache.loadOffset();
+            # we do this to preload into redis
             await loop.run_in_executor(
                 None,
-                lambda:layer_cache.preload_slices()
+                lambda:run_preloader()
             )
         except Exception as exc:
             logger.error(f"Pre-warm failed {exc}")
