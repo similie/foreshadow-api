@@ -34,11 +34,12 @@ logger = logging.getLogger(__name__)
 DEBOUNCE_INTERVAL = 0.3  # debounce period in seconds
 
 class InterpolatorCachingService:
-    def __init__(self, cache_backend: ICacheBackend, local_cache: ICacheBackend):
+    def __init__(self, cache_backend: ICacheBackend, local_cache: ICacheBackend, no_mem = False):
         self.cache = cache_backend
         self.local_cache = local_cache
         self.debounce_lock = Lock()
         # Maps key -> (latest_interpolator, timer)
+        self._no_mem = no_mem
         self.debounce_map = {}
 
     def _untangle_pickle(self, cached: Any) -> Optional[Interpolator]:
@@ -62,6 +63,8 @@ class InterpolatorCachingService:
 
     def set_global_cache_val(self, key: str, inter: Interpolator, expire = CACHE_TTL) -> None:
         # Write the value to the global cache (e.g., Redis)
+        if self._no_mem:
+            return
         self.cache.set(key, pickle.dumps(inter, protocol=4), expire=expire)
 
     def _debounce_callback(self, key: str) -> None:
@@ -99,7 +102,7 @@ class ModelService:
       - Parallel tasks like prewarming.
     """
 
-    def __init__(self, cache_backend: ICacheBackend, local_cache: ICacheBackend = LocalStorage()) -> None:
+    def __init__(self, cache_backend: ICacheBackend, local_cache: ICacheBackend = LocalStorage(), no_mem = False) -> None:
         self.config = SystemConfig()
         self.cache = cache_backend
         self.local_cache = local_cache
@@ -113,7 +116,7 @@ class ModelService:
         self.transformer = Transformer.from_crs("epsg:4326", "epsg:3857", always_xy=True)
         self.colors = MapColors()
         self.interpolator = Interpolator(self.transformer)
-        self.interpolator_cache = InterpolatorCachingService(self.cache, self.local_cache)
+        self.interpolator_cache = InterpolatorCachingService(self.cache, self.local_cache, no_mem)
 
         # self._preload_all_grib_data()
     def get_or_build_tile_grid(self, ip, pts: np.ndarray, tile_key: str, oversize: int = 257) -> Optional[np.ndarray]:

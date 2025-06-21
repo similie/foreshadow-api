@@ -27,8 +27,7 @@ import asyncio
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv, find_dotenv
-
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from gfs_render import ModelService, RedisCacheBackend, TileRendering, MemoryLayerCache, LocalStorage
 
 env_file = find_dotenv()                     # returns path or ''
@@ -36,23 +35,23 @@ print("Loading .env from:", env_file)
 load_dotenv(env_file, verbose=True)
 
 
-def _bump_nice():
-    try:
-        # raise our niceness by 10 so this process is "nicer" (lower priority)
-        os.nice(10)
-    except Exception:
-        pass
+# def _bump_nice():
+#     try:
+#         # raise our niceness by 10 so this process is "nicer" (lower priority)
+#         os.nice(10)
+#     except Exception:
+#         pass
 
-def do_prewarm():
-    run_workers()
+# def do_prewarm():
+#     run_workers()
 
 
-prewarm_process_executor = ProcessPoolExecutor(
-    max_workers=os.cpu_count() or 1,
-    initializer=_bump_nice
-)
+# prewarm_process_executor = ProcessPoolExecutor(
+#     max_workers=os.cpu_count() or 1,
+#     initializer=_bump_nice
+# )
 
-prewarm_executor = ThreadPoolExecutor(max_workers=1)
+prewarm_executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 1)
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -339,15 +338,6 @@ async def forecast_route(request: Request):
 #———————————————————————————————
 # 1) the “pre-warm” worker
 #———————————————————————————————
-
-def run_workers():
-    try:
-        layer_cache.preload_slices()
-        layer_cache.preload_tiles()
-        layer_cache.set_initialized()
-    except Exception as e:
-        print(f"Error in run_workers: {e}")
-
 async def _prewarm_loop(
     interval_s: float = 60.0,
 ):
@@ -364,7 +354,7 @@ async def _prewarm_loop(
                     # last_future =  prewarm_process_executor.submit(run_workers)
                     last_future =  loop.run_in_executor(
                         prewarm_executor,
-                        run_workers #layer_cache.preload_to_local()
+                        layer_cache.preloader #layer_cache.preload_to_local()
                     )
                 else:
                     logger.info("Previous prewarm still running, skipping this cycle")

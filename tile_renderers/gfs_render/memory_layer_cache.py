@@ -160,8 +160,8 @@ class MemoryLayerCache:
         if no_process:
             return None
 
-        search  = {}
-        search["offset"] = offset
+        search = {}
+        # search["offset"] = offset
         grbs = self.model_service._get_raw_grib(self.model, offset, search)
         result = self.model_service._set_cached_grib_values(
             grbs,
@@ -574,13 +574,21 @@ class MemoryLayerCache:
         print("Preloader finished")
         self._init_run = False
 
+    def preloader(self):
+        try:
+            self.preload_slices()
+            self.preload_tiles()
+            self.set_initialized()
+        except Exception as e:
+            print(f"Error in run_workers: {e}")
+
     def preload_slices(self):
         if self._loading:
             return
 
         self._loading = True
-        cache_key = self.model_service._get_grib_dict_values_key(self.model, 0)
-        values = self.model_service._cache_get(cache_key) or {}
+        # cache_key = self.model_service._get_grib_dict_values_key(self.model, 0)
+        # values = self.model_service._cache_get(cache_key) or {}
         pm = self.model_service.build_param_map_for_offset(self.model)
         loaded_offsets = self.offsets # self.offsets_primary # self.offsets if  self.preload_state  else self.offsets_primary
         print(f'RUNNING A PRELOAD WITH THESE OFFSET {loaded_offsets} {len(loaded_offsets)}')
@@ -596,18 +604,18 @@ class MemoryLayerCache:
                 search: Dict[str, Any] = {}
                 grbs = self.model_service._get_raw_grib(self.model, off, search)
                 if not grbs:
-                    return values
+                    return
                 for param_key in param_keys:
-                    key_name = param_key.get("param_key")
+                    # key_name = param_key.get("param_key")
                     result = self._load_offset_for_param_key(param_key, off, grbs, pm, search)
                     if result is None:
                         continue
-                    values[param_key.get("key", key_name)] = result
+                    # values[param_key.get("key", key_name)] = result
 
                 grbs.close() # type: ignore
             except Exception as e:
                 print(f"ERROR {e}")
-            return values
+            # return values
         # self.get_worker_count()
         workers = self.get_worker_count()
         print(f"WORKERS {workers}")
