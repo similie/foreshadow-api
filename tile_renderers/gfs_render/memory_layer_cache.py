@@ -620,10 +620,14 @@ class MemoryLayerCache:
         workers = self.get_worker_count()
         print(f"WORKERS {workers}")
         with ThreadPoolExecutor(max_workers=workers) as exe:
-            futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
-            for fut in as_completed(futures):
-                total_length += 1
-                print(f"PRELOAD EXECUTION COMPLETED {total_length} of {length}")
+            try:
+                futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
+                for fut in as_completed(futures):
+                    total_length += 1
+                    print(f"PRELOAD EXECUTION COMPLETED {total_length} of {length}")
+            except Exception as e:
+                print(f"Preload execution error {e}")
+
 
         self._loading = False
 
