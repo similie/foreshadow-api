@@ -350,16 +350,16 @@ async def _prewarm_loop(
             print("PRELOAD EXECUTION STARTED")
             try:
                 if last_future is None or last_future.done():
-                    # loop = asyncio.get_running_loop()
+                    loop = asyncio.get_running_loop()
                     logger.info("Submitting new prewarm task")
                     # last_future =  prewarm_process_executor.submit(run_workers)
-                    # last_future =  loop.run_in_executor(
-                    #     app.state.prewarm_executor,
-                    #     layer_cache.preloader #layer_cache.preload_to_local()
-                    # )
-                    last_future = app.state.prewarm_executor.submit(
+                    last_future =  loop.run_in_executor(
+                        app.state.prewarm_executor,
                         layer_cache.preloader #layer_cache.preload_to_local()
                     )
+                    # last_future = app.state.prewarm_executor.submit(
+                    #     layer_cache.preloader #layer_cache.preload_to_local()
+                    # )
                 else:
                     logger.info("Previous prewarm still running, skipping this cycle")
 
