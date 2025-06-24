@@ -353,8 +353,8 @@ async def _prewarm_loop(
                     loop = asyncio.get_running_loop()
                     logger.info("Submitting new prewarm task")
                     # last_future =  prewarm_process_executor.submit(run_workers)
-                    last_future =  loop.run_in_executor(
-                        app.state.prewarm_executor,
+                    last_future = loop.run_in_executor(
+                        None,
                         layer_cache.preloader #layer_cache.preload_to_local()
                     )
                     # last_future = app.state.prewarm_executor.submit(
