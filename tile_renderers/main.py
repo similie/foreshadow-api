@@ -52,7 +52,7 @@ load_dotenv(env_file, verbose=True)
 #     initializer=_bump_nice
 # )
 
-prewarm_executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 1)
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -350,11 +350,14 @@ async def _prewarm_loop(
             print("PRELOAD EXECUTION STARTED")
             try:
                 if last_future is None or last_future.done():
-                    loop = asyncio.get_running_loop()
+                    # loop = asyncio.get_running_loop()
                     logger.info("Submitting new prewarm task")
                     # last_future =  prewarm_process_executor.submit(run_workers)
-                    last_future =  loop.run_in_executor(
-                        prewarm_executor,
+                    # last_future =  loop.run_in_executor(
+                    #     app.state.prewarm_executor,
+                    #     layer_cache.preloader #layer_cache.preload_to_local()
+                    # )
+                    last_future = app.state.prewarm_executor.submit(
                         layer_cache.preloader #layer_cache.preload_to_local()
                     )
                 else:
@@ -389,6 +392,7 @@ async def _prewarm_loop(
 
 def start_prewarm():
     print("GETTING STARTING WITH PREWARMING")
+    app.state.prewarm_executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 1)
     loop = asyncio.get_running_loop()
     # run every 30 minutes
     loop.create_task(_prewarm_loop(600.0 * 3))

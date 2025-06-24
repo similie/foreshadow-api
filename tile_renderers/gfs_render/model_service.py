@@ -990,6 +990,15 @@ class ModelService:
 # from typing import Any, Callable, Dict, List, Optional, Union
 
 # Assume logger is defined somewhere
+#
+    def build_date_content(self, metadata: Dict[str, Any], offset: int) -> Dict[str, Any]:
+        date_time = self._build_valid_datetime_from_metadata(metadata, offset)
+        return {
+            "datetime": date_time.isoformat(),
+            "offset": offset,
+            "day": date_time.day,
+            "hour": date_time.hour
+        }
 
     def get_point_forecast_timeseries(
         self,
@@ -1036,12 +1045,13 @@ class ModelService:
                     res = fut.result()
                     if res:
                         results.append({
-                            "offset": off,
+                            # "offset": off,
                             "param_key": local_param_key,
                             "value": res["value"],
                             "units": res["units"],
                             "metadata": res["metadata"],
-                            "datetime": self._build_valid_datetime_from_metadata(res["metadata"], off).isoformat()
+                            **self.build_date_content(res["metadata"], off)
+                            # "datetime": self._build_valid_datetime_from_metadata(res["metadata"], off).isoformat()
                         })
                 except Exception as e:
                     logger.error(f"Error processing offset {off} for param {local_param_key}: {e}")
@@ -1056,10 +1066,13 @@ class ModelService:
         for r in results:
             pk = r["param_key"]
             if pk not in final_results:
-                final_results[pk] = {"values": [], "units": r["units"], "metadata": r.get("metadata", {})}
+                final_results[pk] = {"values": [], "metadata": r.get("metadata", {})}
             final_results[pk]["values"].append({
                 "datetime": r["datetime"],
-                "value": r["value"]
+                "value": r["value"],
+                "offset": r["offset"],
+                "day": r["day"],
+                "hour": r["hour"]
             })
         for res in final_results.values():
             res["values"] = sorted(

@@ -10,7 +10,7 @@ After=network.target
 [Service]
 User=root
 WorkingDirectory=/root/foreshadow-api/tile_renderers
-ExecStart=/bin/bash -c 'source /root/foreshadow-api/.venv/bin/activate && exec uvicorn main:app --host 0.0.0.0 --port 5001 --workers 2'
+ExecStart=/bin/bash -c 'source /root/foreshadow-api/.venv/bin/activate && exec uvicorn main:app --host 0.0.0.0 --port 5001 --workers 4'
 
 Restart=always
 
