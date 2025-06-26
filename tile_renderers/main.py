@@ -28,11 +28,11 @@ import asyncio
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv, find_dotenv
-from concurrent.futures import ThreadPoolExecutor
+# from concurrent.futures import ThreadPoolExecutor
 from gfs_render import ModelService, RedisCacheBackend, TileRendering, MemoryLayerCache, LocalStorage
 
 env_file = find_dotenv()                     # returns path or ''
-print("Loading .env from:", env_file)
+logger.info(f"Loading .env from: {env_file}")
 load_dotenv(env_file, verbose=True)
 
 
@@ -158,9 +158,12 @@ def list_params(model: str, hour_offset: int):
 @app.get("/parameters")
 def parameters_route():
     offset = 0
-    results = model_service.parameter_definitions(offset)
-    return JSONResponse(content={"models": results})
-
+    try:
+        results = model_service.parameter_definitions(offset)
+        return JSONResponse(content={"models": results})
+    except Exception as e:
+        logger.error(f"Error listing parameters: {e}")
+        raise HTTPException(status_code=500, detail="Parameter extraction error")
 
 @app.post("/point", response_model=dict)
 @app.post("/point/{hour_offset}", response_model=dict)
@@ -229,7 +232,6 @@ async def forecast_streaming_route(request: Request):
         asyncio.run_coroutine_threadsafe(progress_queue.put(message), loop)
 
     loop = asyncio.get_event_loop()
-
     # Run the forecast computation in an executor so it doesn't block the event loop.
     timeseries_future = loop.run_in_executor(
         None,
@@ -321,21 +323,25 @@ async def forecast_route(request: Request):
     user_tof = data.get("typeOfLevel")
     step_type = data.get("stepType")
 
-    timeseries = model_service.get_point_forecast_timeseries(
-        model=model,
-        param_keys=param_keys,
-        lat=lat,
-        lon=lon,
-        start_hour_offset=start_hour_offset,
-        total_days=total_days,
-        step_hours=step_hours,
-        level=level_arg,
-        type_of_level=user_tof,
-        step_type=step_type
-    )
-    if not timeseries:
-        return JSONResponse(content=[], status_code=200)
-    return JSONResponse(content=timeseries)
+    try:
+        timeseries = model_service.get_point_forecast_timeseries(
+            model=model,
+            param_keys=param_keys,
+            lat=lat,
+            lon=lon,
+            start_hour_offset=start_hour_offset,
+            total_days=total_days,
+            step_hours=step_hours,
+            level=level_arg,
+            type_of_level=user_tof,
+            step_type=step_type
+        )
+        if not timeseries:
+            return JSONResponse(content=[], status_code=200)
+        return JSONResponse(content=timeseries)
+    except Exception as e:
+        logger.error(f"Timeseries exception error {e}")
+        raise HTTPException(status_code=400, detail="No JSON body provided.")
 #———————————————————————————————
 # 1) the “pre-warm” worker
 #———————————————————————————————
@@ -347,11 +353,10 @@ async def _prewarm_loop(
         # last_future = None
         while True:
             # pick random lat/lon in valid ranges
-            print("PRELOAD EXECUTION STARTED")
+            logger.info("PRELOAD EXECUTION STARTED")
             try:
                 # if last_future is None or last_future.done():
                     # loop = asyncio.get_running_loop()
-                logger.info("Submitting new prewarm task")
                     # last_future =  prewarm_process_executor.submit(run_workers)
                 # await layer_cache.preloader()
                 await asyncio.to_thread(layer_cache.preloader)
@@ -378,13 +383,13 @@ async def _prewarm_loop(
                 #    lambda: run_workers() #layer_cache.preload_to_local()
                 # )
             except Exception as exc:
-                logger.error(f"Pre-warm failed {exc}")
+                logger.error(f"Pre-warm failed {exc}", exc_info=True)
             # We do this so if a multi-process server instance
             # we do not have all of our pre-warmers running at the same time
             choice = random.randint(0, 5)
             spread_time = choice * 60
             sleep = interval_s + spread_time
-            print("Sleeping for ", sleep / 60)
+            logger.info(f"Sleeping for {sleep / 60}")
             await asyncio.sleep(sleep)
     except Exception as outer_exc:
         logger.critical(f"_prewarm_loop has died with: {outer_exc}", exc_info=True)
@@ -393,17 +398,16 @@ async def _prewarm_loop(
 
 
 def start_prewarm():
-    print("GETTING STARTING WITH PREWARMING")
-    app.state.prewarm_executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 1)
+    logger.info("GETTING STARTING WITH PREWARMING")
+    # app.state.prewarm_executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 1)
     loop = asyncio.get_running_loop()
     # run every 30 minutes
-    loop.create_task(_prewarm_loop(600.0 * 3))
+    loop.create_task(_prewarm_loop(60.0 * 3))
 #———————————————————————————————
 # 2) start it on app startup
 #———————————————————————————————
 @app.on_event("startup")
 async def kick_off_prewarm():
-    print("GETTING STARTING WITH PREWARMING")
     start_prewarm()
 ###############################################################################
 # Main entry point

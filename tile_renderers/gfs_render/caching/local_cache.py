@@ -4,6 +4,9 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, List
 from .cache import ICacheBackend
 
+import logging
+# Configure logging for debugging purpose
+logger = logging.getLogger(__name__)
 
 class LocalStorage(ICacheBackend):
     """
@@ -132,33 +135,34 @@ class LocalStorage(ICacheBackend):
         """
         while not self._stop_event.is_set():
             with self._lock:
-                if not self.data_time:
-                    # No expiring keys—sleep one minute
-                    next_sleep = 60
-                else:
-                    now = datetime.now()
-                    soonest: Optional[float] = None
-                    expired: List[str] = []
+                next_sleep = 60
+                if self.data_time:
+                    try:
+                        now = datetime.now()
+                        soonest: Optional[float] = None
+                        expired: List[str] = []
 
-                    # Find expired keys and next expiration time
-                    for k, details in list(self.data_time.items()):
-                        expires_at = details["created_at"] + timedelta(seconds=details["ttl"])
-                        delta = (expires_at - now).total_seconds()
-                        if delta <= 0:
-                            expired.append(k)
+                        # Find expired keys and next expiration time
+                        for k, details in list(self.data_time.items()):
+                            expires_at = details["created_at"] + timedelta(seconds=details["ttl"])
+                            delta = (expires_at - now).total_seconds()
+                            if delta <= 0:
+                                expired.append(k)
+                            else:
+                                if soonest is None or delta < soonest:
+                                    soonest = delta
+
+                        # Remove expired
+                        for k in expired:
+                            self._delete_no_lock(k)
+
+                        # Determine sleep interval
+                        if soonest is None:
+                            next_sleep = 60
                         else:
-                            if soonest is None or delta < soonest:
-                                soonest = delta
-
-                    # Remove expired
-                    for k in expired:
-                        self._delete_no_lock(k)
-
-                    # Determine sleep interval
-                    if soonest is None:
-                        next_sleep = 60
-                    else:
-                        next_sleep = min(soonest, 60)
+                            next_sleep = min(soonest, 60)
+                    except Exception as e:
+                        logger.error(f"Failed thread cleanup in LocalStorage {e}")
 
             time.sleep(next_sleep)
 # class LocalStorage:

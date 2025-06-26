@@ -78,7 +78,7 @@ class MemoryLayerCache:
             self.offsets = [*self.offsets, *range_values]
 
         # self._append_midnight_indices(self.offsets)
-        print(f"I have these layered offsets {self.offsets}")
+        logger.info(f"I have these layered offsets {self.offsets}")
 
     def is_loading(self):
        return self._loading and self._init_run
@@ -89,7 +89,7 @@ class MemoryLayerCache:
             try:
                 return pickle.loads(cached)
             except Exception as e:
-                logger.error(f"Error unpickling cache key {key}: {e}")
+                logger.error(f"Error unpickling cache key {key}: {e}", exc_info=True)
         return None
 
     def _cache_set(self, key: str, value: Any) -> None:
@@ -99,7 +99,7 @@ class MemoryLayerCache:
         try:
             self._cacheStore.set(key, pickle.dumps(value, protocol=4), expire=self._ttl)
         except Exception as e:
-            logger.error(f"Error setting cache key {key}: {e}")
+            logger.error(f"Error setting cache key {key}: {e}", exc_info=True)
 
     def _get_cache_key(self, param_key: str, offset: int) -> str:
         hour_key = self.model_service.todays_hour_with_date(offset)
@@ -111,7 +111,7 @@ class MemoryLayerCache:
 
     def _preload_offset(self, off: int) -> None:
         # hour_key = self.model_service.todays_hour_with_date(off)
-        print(f"[Preload] offset={off} -> hour_key={off}")
+        logger.info(f"[Preload] offset={off} -> hour_key={off}")
         for entry in self.param_keys:
             pk = entry["param_key"]
             lvl = entry.get("level")
@@ -122,7 +122,7 @@ class MemoryLayerCache:
             try:
                 available = self._cacheStore.available(key)
                 has_expire = self._localStorage.available(expire_key)
-                print(f"[Preload] Building interpolator for {key} {available}")
+                logger.info(f"[Preload] Building interpolator for {key} {available}")
                 if available and has_expire:
                     self._cacheStore.extend(key, self._ttl)
                     continue
@@ -131,15 +131,15 @@ class MemoryLayerCache:
                     self.model, pk, off, lvl, tof, stp
                 )
                 if not ip:
-                    print(f"[Preload] Skipped {pk}@{off} (no data)")
+                    logger.warning(f"[Preload] Skipped {pk}@{off} (no data)")
                     continue
-                print(f"[Preload] Setting cache key {key}")
+                logger.info(f"[Preload] Setting cache key {key}")
 
                 self._cache_set(key, ip)
                 self._localStorage.set(expire_key, True, self._ttl_3)
             except Exception as e:
-                logger.error(f"Error setting cache key {key}: {e}")
-        print(f"[Preload] Completed offset {off}")
+                logger.error(f"Error setting cache key {key}: {e}", exc_info=True)
+        logger.info(f"[Preload] Completed offset {off}")
 
     def _get_cached_values(self, key_value: dict[str, Any], offset: int, no_process: bool = False ):
         """
@@ -162,21 +162,27 @@ class MemoryLayerCache:
 
         search = {}
         # search["offset"] = offset
-        grbs = self.model_service._get_raw_grib(self.model, offset, search)
-        result = self.model_service._set_cached_grib_values(
-            grbs,
-            key_name,
-            self.model,
-            offset,
-            key_value.get("level"),
-            key_value.get("typeOfLevel"),
-            key_value.get("stepType"),
-            self._apply_search_tems(key_value, search)
-        )
+        try:
+            grbs = self.model_service._get_raw_grib(self.model, offset, search)
+            result = self.model_service._set_cached_grib_values(
+                grbs,
+                key_name,
+                self.model,
+                offset,
+                key_value.get("level"),
+                key_value.get("typeOfLevel"),
+                key_value.get("stepType"),
+                self._apply_search_tems(key_value, search)
+            )
+            self._localStorage.set(key, result, self._ttl_local)
+            if grbs is not None:
+                grbs.close() # type: ignore
+            return result
+        except Exception as e:
+            logger.error(f"GRBS Processing error in _get_cached_values: {e}", exc_info=True)
         # self._cacheStore.set(key, result, self._ttl_3)
-        grbs.close() # type: ignore
-        self._localStorage.set(key, result, self._ttl_local)
-        return result
+        return None
+
 
     def _get_base_time(self):
         now = datetime.utcnow()
@@ -206,7 +212,7 @@ class MemoryLayerCache:
                 sendResults["datetime"] = self.model_service._build_valid_datetime_from_metadata(meta_dict, offset).isoformat()
                 return sendResults
             except Exception as e:
-                print(f"ERROR {e}")
+                logger.error(f"ERROR find_current_slice {e}", exc_info=True)
 
         with ThreadPoolExecutor(max_workers=self.get_worker_count()) as exe:
             cfg = SystemConfig().get_default_forecast_json()
@@ -254,7 +260,7 @@ class MemoryLayerCache:
             if meta["forecastEnd"] < forecast_time:
                 sendResults["metadata"]["forecastEnd"] = forecast_time
         except Exception as e:
-            print('Offset append error', e)
+            logger.error(f'Offset append error {e}', exc_info=True)
 
     def find_slice(self, lat: float, lon: float, start_hour_offset = 0):
         values = []
@@ -291,7 +297,7 @@ class MemoryLayerCache:
 
                 return sendResults
             except Exception as e:
-                print(f"ERROR {e}")
+                logger.error(f"ERROR find_slice: {e}", exc_info=True)
 
         with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as exe:
             cfg = SystemConfig().get_default_forecast_json()
@@ -512,7 +518,7 @@ class MemoryLayerCache:
                 }
                 slice_results.append(precip_24)
             except Exception as e:
-                print("Failed to apply daily precipitation", e)
+                logger.error(f"Failed to apply daily precipitation {e}", exc_info=True)
 
     def _apply_search_tems(self, param_key: Dict[str, Any],  search: Dict[str, Any]) -> Dict[str, Any]:
         grbSearch = {**param_key.get("grbSearch", {"terms": {}})}
@@ -548,7 +554,7 @@ class MemoryLayerCache:
                 self._localStorage.set(key, result, self._ttl_local)
             return result
         except Exception as e:
-            print(f"ERROR::_load_offset_for_param_key {e}")
+            logger.error(f"ERROR::_load_offset_for_param_key {e}", exc_info=True)
 
     def generate_midnight_indices(self, max_offset: int, strict = False) -> list[int]:
         """
@@ -571,7 +577,7 @@ class MemoryLayerCache:
         return mids
 
     def set_initialized(self):
-        print("Preloader finished")
+        logger.info("Preloading finished")
         self._init_run = False
 
     def preloader(self):
@@ -580,58 +586,50 @@ class MemoryLayerCache:
             self.preload_tiles()
             self.set_initialized()
         except Exception as e:
-            print(f"Error in run_workers: {e}")
+            logger.error(f"Error in run_workers: {e}", exc_info=True)
 
     def preload_slices(self):
         if self._loading:
             return
-
+        logger.info("Preloading slices")
         self._loading = True
-        # cache_key = self.model_service._get_grib_dict_values_key(self.model, 0)
-        # values = self.model_service._cache_get(cache_key) or {}
-        pm = self.model_service.build_param_map_for_offset(self.model)
-        loaded_offsets = self.offsets # self.offsets_primary # self.offsets if  self.preload_state  else self.offsets_primary
-        print(f'RUNNING A PRELOAD WITH THESE OFFSET {loaded_offsets} {len(loaded_offsets)}')
-        offsets = [off for off in loaded_offsets if off >= 0]
-        self._append_midnight_indices(offsets)
-        length = len(offsets)
-        total_length = 0
-        cfg = SystemConfig().get_default_forecast_json()
-        param_keys = cfg["param_keys"]
-        print("RUNNING THESE OFFSETS", offsets)
-        def _compute_for_offset(off: int):
-            try:
+        try:
+            pm = self.model_service.build_param_map_for_offset(self.model)
+            loaded_offsets = self.offsets # self.offsets_primary # self.offsets if  self.preload_state  else self.offsets_primary
+            logger.info(f'RUNNING A PRELOAD WITH THESE OFFSET: {len(loaded_offsets)}')
+            offsets = [off for off in loaded_offsets if off >= 0]
+            self._append_midnight_indices(offsets)
+            length = len(offsets)
+            total_length = 0
+            cfg = SystemConfig().get_default_forecast_json()
+            param_keys = cfg["param_keys"]
+            logger.info(f"RUNNING THESE OFFSETS {offsets}")
+            def _compute_for_offset(off: int):
                 search: Dict[str, Any] = {}
                 grbs = self.model_service._get_raw_grib(self.model, off, search)
                 if not grbs:
                     return
-                for param_key in param_keys:
-                    # key_name = param_key.get("param_key")
-                    result = self._load_offset_for_param_key(param_key, off, grbs, pm, search)
-                    if result is None:
-                        continue
-                    # values[param_key.get("key", key_name)] = result
-
+                try:
+                    for param_key in param_keys:
+                        self._load_offset_for_param_key(param_key, off, grbs, pm, search)
+                except Exception as e:
+                    logger.error(f"Computation ERROR in preload slices: {e}")
                 grbs.close() # type: ignore
-            except Exception as e:
-                print(f"ERROR {e}")
-            # return values
-        # self.get_worker_count()
-        workers = self.get_worker_count()
-        print(f"WORKERS {workers}")
-        with ThreadPoolExecutor(max_workers=workers) as exe:
-            try:
-                futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
-                for fut in as_completed(futures):
-                    total_length += 1
-                    print(f"PRELOAD EXECUTION COMPLETED {total_length} of {length}")
-            except Exception as e:
-                print(f"Preload execution error {e}")
 
-
+            workers = self.get_worker_count()
+            logger.info(f"WORKERS {workers}")
+            with ThreadPoolExecutor(max_workers=workers) as exe:
+                try:
+                    futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
+                    for fut in as_completed(futures):
+                        total_length += 1
+                        logger.info(f"PRELOAD EXECUTION COMPLETED {total_length} of {length}")
+                except Exception as e:
+                    logger.error(f"Preload slices execution error {e}")
+        except Exception as e:
+            logger.error(f"Preload slices thread failure {e}", exc_info=True)
         self._loading = False
-
-        print("Preload completed")
+        logger.info("Preload slices completed")
 
     def _preload_param(self, entry: Dict[str, Any]) -> None:
         pk = entry["param_key"]
@@ -652,10 +650,12 @@ class MemoryLayerCache:
         if self._loading_tile:
             return
         self._loading_tile = True
+        try:
 
-        workers = self.get_worker_count()
-        logger.info(f"[RedisLayerCache] Preloading {len(self.offsets)} offsets × {len(self.param_keys)} params using {workers} workers")
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            executor.map(self._preload_param, self.param_keys.copy())
-
+            workers = self.get_worker_count()
+            logger.info(f"[preload_tiles] Preloading {len(self.offsets)} offsets × {len(self.param_keys)} params using {workers} workers")
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                executor.map(self._preload_param, self.param_keys.copy())
+        except Exception as e:
+            logger.error(f"Tile preload exeception {e}", exc_info=True);
         self._loading_tile = False

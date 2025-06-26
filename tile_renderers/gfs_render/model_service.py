@@ -279,15 +279,18 @@ class ModelService:
         return None, None, None
 
     def get_grib_file(self, model: str, hour_offset: int, grbSearch: Optional[Dict[str, Any]] = None) -> Optional[str]:
-        d, r, fhr = self.find_date_run_fhr(model, hour_offset)
-        if not d:
-            return None
-        cfg = self.MODEL_MAP[model]
-        folder = os.path.join(self.GRIB_FILES_PATH, d, r)  # type: ignore
-        fname = f"{cfg['FILE_PREFIX']}.t{r}z.{cfg['FILE_CATEGORY']}.{cfg['RESOLUTION']}.f{fhr:03d}{cfg['FILE_APPENDIX']}"
-        fullpath = os.path.join(folder, fname)
-        if os.path.exists(fullpath):
-            return fullpath
+        try:
+            d, r, fhr = self.find_date_run_fhr(model, hour_offset)
+            if not d:
+                return None
+            cfg = self.MODEL_MAP[model]
+            folder = os.path.join(self.GRIB_FILES_PATH, d, r)  # type: ignore
+            fname = f"{cfg['FILE_PREFIX']}.t{r}z.{cfg['FILE_CATEGORY']}.{cfg['RESOLUTION']}.f{fhr:03d}{cfg['FILE_APPENDIX']}"
+            fullpath = os.path.join(folder, fname)
+            if os.path.exists(fullpath):
+                return fullpath
+        except Exception as e:
+            logger.error(f"GRB Path Error {e}")
         return None
     # -------------------------------------------------------------------------
     # Building Param Map
@@ -357,6 +360,8 @@ class ModelService:
                 lats, lons = g.latlons()
                 lat_flip = self.flip_latitudes(self.build_interpolator_key(model, param_key, hour_offset, level, level_type, step_type), g)
                 ip = self.interpolator.build_interpolator(data, lats, lons, lat_flip=lat_flip, decimation=self.decimation)
+                if ip is None:
+                    return None
                 # meta = self._extract_grib_metadata(g)
                 gmin = float(getattr(g, "minimum", 0.0))
                 gmax = float(getattr(g, "maximum", 1.0))
@@ -407,7 +412,7 @@ class ModelService:
         try:
             return template.format(**mapping)
         except KeyError as e:
-            print(f"Missing key '{e.args[0]}' for string interpolation")
+            logger.error(f"Missing key '{e.args[0]}' for string interpolation")
 
         return None
             # If a placeholder is missing in `mapping`, re-raise with a clear message.
@@ -447,7 +452,7 @@ class ModelService:
                 self._apply_search_conditions(key, appendedSearch, conditions)
         except KeyError as e:
             # If a placeholder is missing in `template`, re-raise with a clear message.
-            print(f"Key/value interpolation error '{e}'")
+            logger.error(f"Key/value interpolation error '{e}'")
             return search
         return appendedSearch;
 
@@ -495,21 +500,26 @@ class ModelService:
             "parameterName", "parameterUnits", "shortName", "typeOfLevel", "level",
             "minimum", "maximum", "dataDate", "dataTime", "forecastTime", "name", "stepType", "startStep", "endStep"
         ]
-        meta = {k: getattr(grb_msg, k, None) for k in relevant_keys}
-        name_details = meta["name"]
-        if name_details:
-            meta['key'] = self.make_param_key(name_details)
+        try:
+            meta = {k: getattr(grb_msg, k, None) for k in relevant_keys}
+            name_details = meta["name"]
+            if name_details:
+                meta['key'] = self.make_param_key(name_details)
 
-        forcast_time = meta.get("forecastTime", 0)
-        start_step = meta.get("startStep", None)
-        end_step = meta.get("endStep", None)
-        if start_step is None or end_step is None:
+            forcast_time = meta.get("forecastTime", 0)
+            start_step = meta.get("startStep", None)
+            end_step = meta.get("endStep", None)
+            if start_step is None or end_step is None:
+                return meta
+
+            if start_step == forcast_time and start_step < end_step:
+                meta["forecastTime"] = end_step
+
             return meta
+        except Exception as e:
+            logger.error(f"Meta execption error {e}")
+        return {}
 
-        if start_step == forcast_time and start_step < end_step:
-            meta["forecastTime"] = end_step
-
-        return meta
 
     # def _find_midnight_for_offset(self, offset: int) -> int:
     #     """
@@ -763,7 +773,7 @@ class ModelService:
             logger.warning(f"No matching messages at all for param={param_name}")
             return None
         except Exception as e:
-            print(f"Exception while targeting suitable layer {e}")
+            logger.error(f"Exception while targeting suitable layer {e}")
             return None
 
     def valid_model(self, model: str) -> bool:
@@ -1213,10 +1223,9 @@ class ModelService:
             logger.warning(f"No GRIB file for {model} offset {hour_offset} {fp}")
             return None
 
-        if search is not None:
-           self._append_file_meta_values(fp, hour_offset, search)
-
         try:
+            if search is not None:
+               self._append_file_meta_values(fp, hour_offset, search)
             return pygrib.open(fp) # type: ignore
         except Exception as exc:
             logger.error(f"Error reading GRIB file {fp}: {exc}", exc_info=True)
