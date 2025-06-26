@@ -574,7 +574,7 @@ class MemoryLayerCache:
         print("Preloader finished")
         self._init_run = False
 
-    async def preloader(self):
+    def preloader(self):
         try:
             self.preload_slices()
             self.preload_tiles()

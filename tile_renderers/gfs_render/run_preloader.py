@@ -23,31 +23,29 @@ backend_cache = RedisCacheBackend()
 # Set preload_layers=True if you want to prewarm interpolators on startup.
 model_service = ModelService(backend_cache, local_storage, no_mem)
 
-layer_cache = MemoryLayerCache(
-    model_service,
-    no_mem
-)
-
-
 async def _prewarm_loop(
     interval_s: float = 60.0,
 ):
-    loop = asyncio.get_event_loop()
-    while True:
-        # pick random lat/lon in valid ranges
-        print("Running preloader...")
-        try:
-            # we do this to preload into redis
-            await loop.run_in_executor(
-                prewarm_executor,
-                layer_cache.preloader
-            )
-        except Exception as exc:
-            logger.error(f"Pre-warm failed {exc}")
-        # wait before next one
-        #
-        # print("PRELOAD EXECUTION COMPLETE")
-        await asyncio.sleep(interval_s)
+    try:
+        layer_cache = MemoryLayerCache(
+            model_service,
+            no_mem
+        )
+        # loop = asyncio.get_event_loop()
+        while True:
+            # pick random lat/lon in valid ranges
+            print("Running preloader...")
+            try:
+                # we do this to preload into redis
+               layer_cache.preloader()
+            except Exception as exc:
+                logger.error(f"Pre-warm failed {exc}")
+            # wait before next one
+            #
+            # print("PRELOAD EXECUTION COMPLETE")
+            await asyncio.sleep(interval_s)
+    except Exception as e:
+        print(f"Prelader failure {e}")
 
 if __name__ == "__main__":
     print("Starting Preloader")

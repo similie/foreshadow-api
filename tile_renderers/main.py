@@ -353,8 +353,8 @@ async def _prewarm_loop(
                     # loop = asyncio.get_running_loop()
                 logger.info("Submitting new prewarm task")
                     # last_future =  prewarm_process_executor.submit(run_workers)
-                await layer_cache.preloader()
-                # await asyncio.to_thread(layer_cache.preloader)
+                # await layer_cache.preloader()
+                await asyncio.to_thread(layer_cache.preloader)
                     # last_future = loop.run_in_executor(
                     #     None,
                     #     layer_cache.preloader #layer_cache.preload_to_local()
@@ -397,7 +397,7 @@ def start_prewarm():
     app.state.prewarm_executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 1)
     loop = asyncio.get_running_loop()
     # run every 30 minutes
-    loop.create_task(_prewarm_loop(600.0 * 3))
+    loop.create_task(_prewarm_loop(60.0 * 3))
 #———————————————————————————————
 # 2) start it on app startup
 #———————————————————————————————
