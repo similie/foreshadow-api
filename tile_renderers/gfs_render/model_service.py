@@ -704,8 +704,11 @@ class ModelService:
                 select["level"] = i
                 found = grbs.select(**select)
                 if found:
-                    logger.info(f"Found surface data (level={i}) for param={param_name} ")
-                    return found[0]
+                    logger.info(f"Found surface data (level={i}) for param={param_name}: layer length: {len(found)}")
+                    if len(found) > 0:
+                        return found[0]
+                    else:
+                        return None
                 continue
             except:
                 break

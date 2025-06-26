@@ -613,7 +613,7 @@ class MemoryLayerCache:
                     for param_key in param_keys:
                         self._load_offset_for_param_key(param_key, off, grbs, pm, search)
                 except Exception as e:
-                    logger.error(f"Computation ERROR in preload slices: {e}")
+                    logger.error(f"Computation ERROR in preload slices: {e}", exc_info=True)
                 grbs.close() # type: ignore
 
             workers = self.get_worker_count()
@@ -625,7 +625,7 @@ class MemoryLayerCache:
                         total_length += 1
                         logger.info(f"PRELOAD EXECUTION COMPLETED {total_length} of {length}")
                 except Exception as e:
-                    logger.error(f"Preload slices execution error {e}")
+                    logger.error(f"Preload slices execution error {e}", exc_info=True)
         except Exception as e:
             logger.error(f"Preload slices thread failure {e}", exc_info=True)
         self._loading = False
