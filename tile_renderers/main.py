@@ -30,32 +30,13 @@ from pydantic import BaseModel
 from dotenv import load_dotenv, find_dotenv
 # from concurrent.futures import ThreadPoolExecutor
 from gfs_render import ModelService, RedisCacheBackend, TileRendering, MemoryLayerCache, LocalStorage
-
+# logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 env_file = find_dotenv()                     # returns path or ''
 logger.info(f"Loading .env from: {env_file}")
 load_dotenv(env_file, verbose=True)
-
-
-# def _bump_nice():
-#     try:
-#         # raise our niceness by 10 so this process is "nicer" (lower priority)
-#         os.nice(10)
-#     except Exception:
-#         pass
-
-# def do_prewarm():
-#     run_workers()
-
-
-# prewarm_process_executor = ProcessPoolExecutor(
-#     max_workers=os.cpu_count() or 1,
-#     initializer=_bump_nice
-# )
-
-
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+
 # Initialize the cache backend and ModelService.
 local_cache = LocalStorage()
 backend_cache = RedisCacheBackend()
