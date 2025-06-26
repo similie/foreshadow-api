@@ -747,20 +747,24 @@ class ModelService:
         step_type: Optional[str] = None
     ) -> Optional[Any]:
         # print('GETTING THIS DATA ',param_name, type_of_level, level, step_type)
-        layer = self.search_for_provided_level(grbs, param_name, type_of_level, level, step_type)
-        if layer:
-            return layer
-        layer = self.search_height_above_ground(grbs, param_name, type_of_level, step_type)
-        if layer:
-            return layer
-        layer = self.search_iso_surface(grbs, param_name)
-        if layer:
-            return layer
-        layer = self.search_param_only_and_find_surface(grbs, param_name)
-        if layer:
-            return layer
-        logger.warning(f"No matching messages at all for param={param_name}")
-        return None
+        try:
+            layer = self.search_for_provided_level(grbs, param_name, type_of_level, level, step_type)
+            if layer:
+                return layer
+            layer = self.search_height_above_ground(grbs, param_name, type_of_level, step_type)
+            if layer:
+                return layer
+            layer = self.search_iso_surface(grbs, param_name)
+            if layer:
+                return layer
+            layer = self.search_param_only_and_find_surface(grbs, param_name)
+            if layer:
+                return layer
+            logger.warning(f"No matching messages at all for param={param_name}")
+            return None
+        except Exception as e:
+            print(f"Exception while targeting suitable layer {e}")
+            return None
 
     def valid_model(self, model: str) -> bool:
         return model in self.MODEL_MAP
