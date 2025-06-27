@@ -15,6 +15,8 @@ A FastAPI server that:
 
 Run with multiple worker processes (via Uvicorn) to help with CPU‐bound work.
 """
+import faulthandler, sys
+faulthandler.enable(file=sys.stderr, all_threads=True)
 import json
 import os
 import io
