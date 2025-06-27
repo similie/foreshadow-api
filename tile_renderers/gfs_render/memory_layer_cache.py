@@ -40,6 +40,7 @@ class MemoryLayerCache:
         self._ttl_local = self._ttl + (11 + 60)
         self.round_value = 4
         self.no_mem = no_mem
+        self._ecodes_lock = threading.Lock()
 
     def get_worker_count(self):
         # max_cores = 24
@@ -605,16 +606,17 @@ class MemoryLayerCache:
             param_keys = cfg["param_keys"]
             logger.info(f"RUNNING THESE OFFSETS {offsets}")
             def _compute_for_offset(off: int):
-                search: Dict[str, Any] = {}
-                grbs = self.model_service._get_raw_grib(self.model, off, search)
-                if not grbs:
-                    return
-                try:
-                    for param_key in param_keys:
-                        self._load_offset_for_param_key(param_key, off, grbs, pm, search)
-                except Exception as e:
-                    logger.error(f"Computation ERROR in preload slices: {e}", exc_info=True)
-                grbs.close() # type: ignore
+                with self._ecodes_lock:
+                    search: Dict[str, Any] = {}
+                    grbs = self.model_service._get_raw_grib(self.model, off, search)
+                    if not grbs:
+                        return
+                    try:
+                        for param_key in param_keys:
+                            self._load_offset_for_param_key(param_key, off, grbs, pm, search)
+                    except Exception as e:
+                        logger.error(f"Computation ERROR in preload slices: {e}", exc_info=True)
+                    grbs.close() # type: ignore
 
             workers = self.get_worker_count()
             logger.info(f"WORKERS {workers}")
