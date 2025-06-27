@@ -637,12 +637,13 @@ class MemoryLayerCache:
         pk = entry["param_key"]
         logger.info(f"[Preload] Param={pk}")
         for off in range(7):
-            ip = self.model_service.get_or_build_interpolator(
-                self.model, pk, off,
-                entry.get("level"), entry.get("typeOfLevel"), entry.get("stepType")
-            )
-            if not ip:
-                continue
+            with self._ecodes_lock:
+                ip = self.model_service.get_or_build_interpolator(
+                    self.model, pk, off,
+                    entry.get("level"), entry.get("typeOfLevel"), entry.get("stepType")
+                )
+                if not ip:
+                    continue
         logger.info(f"[Preload] Completed param {pk}")
 
     def preload_tiles(self) -> None:
