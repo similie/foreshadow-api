@@ -383,7 +383,7 @@ def start_prewarm():
     # app.state.prewarm_executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 1)
     loop = asyncio.get_running_loop()
     # run every 30 minutes
-    loop.create_task(_prewarm_loop(600.0 * 3))
+    loop.create_task(_prewarm_loop(660.0 * 3))
 #———————————————————————————————
 # 2) start it on app startup
 #———————————————————————————————
