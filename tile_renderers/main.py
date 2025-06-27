@@ -38,14 +38,14 @@ load_dotenv(env_file, verbose=True)
 # Configure logging
 
 # Initialize the cache backend and ModelService.
-local_cache = LocalStorage()
-backend_cache = RedisCacheBackend()
-# Set preload_layers=True if you want to prewarm interpolators on startup.
-model_service = ModelService(backend_cache, local_cache)
-tile_renderer = TileRendering(model_service)
-layer_cache = MemoryLayerCache(
-    model_service
-)
+# local_cache = LocalStorage()
+# backend_cache = RedisCacheBackend()
+# # Set preload_layers=True if you want to prewarm interpolators on startup.
+# model_service = ModelService(backend_cache, local_cache)
+# tile_renderer = TileRendering(model_service)
+# layer_cache = MemoryLayerCache(
+#     model_service
+# )
 
 app = FastAPI(title="Global Norm Map Server", version="1.0")
 # (Optional) Add CORS middleware if needed.
@@ -100,24 +100,24 @@ def serve_tile_route(
 ):
     # timer = TimeLogger()
     # timer.log("I STARTED MY RENDER 1")
-    if not model_service.valid_model(model):
+    if not app.state.model_service.valid_model(model):
         raise HTTPException(status_code=404, detail="Unknown model.")
-    if not tile_renderer.valid_zxy(z, x, y):
+    if not app.state.tile_renderer.valid_zxy(z, x, y):
         raise HTTPException(status_code=404, detail="Invalid tile coordinates.")
 
-    cache_key = model_service.create_tile_cache_key(model, param_key, typeOfLevel, hour_offset, z, x, y, level, stepType)
+    cache_key = app.state.model_service.create_tile_cache_key(model, param_key, typeOfLevel, hour_offset, z, x, y, level, stepType)
     try:
-        cached_tile = backend_cache.get(cache_key)
+        cached_tile = app.state.backend_cache.get(cache_key)
         if cached_tile:
             return StreamingResponse(io.BytesIO(cached_tile), media_type="image/png")
     except Exception as e:
         logger.error(f"Error reading cache: {e}")
 
-    data = tile_renderer.render_tile(model, param_key, hour_offset, z, x, y, level, typeOfLevel, stepType)
+    data = app.state.tile_renderer.render_tile(model, param_key, hour_offset, z, x, y, level, typeOfLevel, stepType)
     if data is None:
         raise HTTPException(status_code=404, detail="No tile data found")
     try:
-        backend_cache.set(cache_key, data, 15 * 60)
+        app.state.backend_cache.set(cache_key, data, 15 * 60)
     except Exception as e:
         logger.error(f"Error writing cache: {e}")
     # timer.log("I ENDED MY RENDER 2")
@@ -127,7 +127,7 @@ def serve_tile_route(
 @app.get("/list_parameters/{model}/{hour_offset}")
 def list_params(model: str, hour_offset: int):
     try:
-        params = model_service.build_paramter_name_list(model, hour_offset)
+        params = app.state.model_service.build_paramter_name_list(model, hour_offset)
         return JSONResponse(content={"parameters": sorted(list(params.values()))})
     except Exception as e:
         logger.error(f"Error listing for {model},{hour_offset}: {e}")
@@ -138,7 +138,7 @@ def list_params(model: str, hour_offset: int):
 def parameters_route():
     offset = 0
     try:
-        results = model_service.parameter_definitions(offset)
+        results = app.state.model_service.parameter_definitions(offset)
         return JSONResponse(content={"models": results})
     except Exception as e:
         logger.error(f"Error listing parameters: {e}")
@@ -164,7 +164,7 @@ async def point_forecast_params_route(request: Request, hour_offset: int = 0):
         raise HTTPException(status_code=400, detail="Missing required fields in JSON body.")
 
     try:
-        values = model_service.iterate_multiple_keys_against_geo_point(
+        values = app.state.model_service.iterate_multiple_keys_against_geo_point(
             model,
             search_parameters,
             lat,
@@ -214,7 +214,7 @@ async def forecast_streaming_route(request: Request):
     # Run the forecast computation in an executor so it doesn't block the event loop.
     timeseries_future = loop.run_in_executor(
         None,
-        lambda: model_service.get_point_forecast_timeseries(
+        lambda: app.state.model_service.get_point_forecast_timeseries(
             model=model,
             param_keys=param_keys,
             lat=lat,
@@ -246,10 +246,10 @@ async def forecast_streaming_route(request: Request):
 
 @app.get("/point", response_model=dict)
 def forecast_point(lat: float, lon: float, hour_offset: int = 0):
-    if layer_cache.is_loading():
+    if app.state.layer_cache.is_loading():
         raise HTTPException(status_code=404, detail="Data is not ready for output.")
     try:
-        result = layer_cache.find_current_slice(lat, lon, hour_offset)
+        result = app.state.layer_cache.find_current_slice(lat, lon, hour_offset)
         if not result:
             raise HTTPException(status_code=404, detail="No data for that offset.")
         return JSONResponse(content=result)
@@ -258,10 +258,10 @@ def forecast_point(lat: float, lon: float, hour_offset: int = 0):
 
 @app.get("/forecast")
 def forecast(lat: float, lon: float, hour_offset: int = 0):
-    if layer_cache.is_loading():
+    if app.state.layer_cache.is_loading():
         raise HTTPException(status_code=404, detail="Data is not ready for output.")
     try:
-        result = layer_cache.find_slice(lat, lon, hour_offset)
+        result = app.state.layer_cache.find_slice(lat, lon, hour_offset)
         if not result:
             raise HTTPException(status_code=404, detail="No data for that offset.")
         return JSONResponse(content=result)
@@ -303,7 +303,7 @@ async def forecast_route(request: Request):
     step_type = data.get("stepType")
 
     try:
-        timeseries = model_service.get_point_forecast_timeseries(
+        timeseries = app.state.model_service.get_point_forecast_timeseries(
             model=model,
             param_keys=param_keys,
             lat=lat,
@@ -338,7 +338,7 @@ async def _prewarm_loop(
                     # loop = asyncio.get_running_loop()
                     # last_future =  prewarm_process_executor.submit(run_workers)
                 # await layer_cache.preloader()
-                await asyncio.to_thread(layer_cache.preloader)
+                await asyncio.to_thread(app.state.layer_cache.preloader)
                     # last_future = loop.run_in_executor(
                     #     None,
                     #     layer_cache.preloader #layer_cache.preload_to_local()
@@ -387,6 +387,19 @@ def start_prewarm():
 #———————————————————————————————
 @app.on_event("startup")
 async def kick_off_prewarm():
+    try:
+        local_cache = LocalStorage()
+        app.state.backend_cache = RedisCacheBackend()
+        # Set preload_layers=True if you want to prewarm interpolators on startup.
+        app.state.model_service = ModelService(app.state.backend_cache, local_cache)
+        app.state.tile_renderer = TileRendering(app.state.model_service)
+        app.state.layer_cache = MemoryLayerCache(
+            app.state.model_service
+        )
+    except Exception as e:
+        logger.critical(f"Application start failed: {e}", exc_info=True)
+        return
+
     start_prewarm()
 ###############################################################################
 # Main entry point
