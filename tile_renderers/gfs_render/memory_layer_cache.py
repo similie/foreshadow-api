@@ -589,6 +589,80 @@ class MemoryLayerCache:
         except Exception as e:
             logger.error(f"Error in run_workers: {e}", exc_info=True)
 
+    def _compute_for_offset(self, off: int, param_keys: List[Dict[str, Any]], pm: Dict[str, Any]):
+        # with self._ecodes_lock:
+        search: Dict[str, Any] = {}
+        grbs = None
+        # if not grbs:
+        #     return
+        try:
+            for param_key in param_keys:
+                key_name = param_key.get("param_key")
+                if not key_name:
+                    return None
+
+                key = self._get_cache_key(key_name, off)
+                if self._localStorage.available(key):
+                    self._localStorage.extend(key, self._ttl);
+                    continue
+                # it goes a lot faster if we do not have to open the file
+                if grbs is None:
+                  grbs = self.model_service._get_raw_grib(self.model, off, search)
+                  if grbs is None:
+                      continue
+
+                self._load_offset_for_param_key(param_key, off, grbs, pm, search)
+                grbs.close() # type: ignore
+        except Exception as e:
+            logger.error(f"Computation ERROR in preload slices: {e}", exc_info=True)
+
+
+    def preload_slices_single_thread(self):
+        if self._loading:
+            return
+        logger.info("Preloading slices")
+        self._loading = True
+        try:
+            pm = self.model_service.build_param_map_for_offset(self.model)
+            loaded_offsets = self.offsets # self.offsets_primary # self.offsets if  self.preload_state  else self.offsets_primary
+            logger.info(f'RUNNING A PRELOAD WITH THESE OFFSET: {len(loaded_offsets)}')
+            offsets = [off for off in loaded_offsets if off >= 0]
+            self._append_midnight_indices(offsets)
+            length = len(offsets)
+            total_length = 0
+            cfg = SystemConfig().get_default_forecast_json()
+            param_keys = cfg["param_keys"]
+            logger.info(f"RUNNING THESE OFFSETS {offsets}")
+            # def _compute_for_offset(off: int):
+            #     with self._ecodes_lock:
+            #         search: Dict[str, Any] = {}
+            #         grbs = self.model_service._get_raw_grib(self.model, off, search)
+            #         if not grbs:
+            #             return
+            #         try:
+            #             for param_key in param_keys:
+            #                 self._load_offset_for_param_key(param_key, off, grbs, pm, search)
+            #         except Exception as e:
+            #             logger.error(f"Computation ERROR in preload slices: {e}", exc_info=True)
+            #         grbs.close() # type: ignore
+            for off in offsets:
+                self._compute_for_offset(off, param_keys, pm)
+                logger.info(f"PRELOAD EXECUTION COMPLETED {total_length} of {length}")
+            # workers = self.get_worker_count()
+            # logger.info(f"WORKERS {workers}")
+            # with ThreadPoolExecutor(max_workers=workers) as exe:
+            #     try:
+            #         futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
+            #         for fut in as_completed(futures):
+            #             total_length += 1
+            #             logger.info(f"PRELOAD EXECUTION COMPLETED {total_length} of {length}")
+            #     except Exception as e:
+            #         logger.error(f"Preload slices execution error {e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"Preload slices thread failure {e}", exc_info=True)
+        self._loading = False
+        logger.info("Preload slices completed")
+
     def preload_slices(self):
         if self._loading:
             return
@@ -645,6 +719,32 @@ class MemoryLayerCache:
                 if not ip:
                     continue
         logger.info(f"[Preload] Completed param {pk}")
+
+    def preloader_single_thread(self):
+        try:
+            self.preload_slices_single_thread()
+            self.preload_tiles_single_thread()
+        except Exception as e:
+            logger.error(f'Failed to run single threaded preloader {e}', exc_info=True)
+
+    def preload_tiles_single_thread(self) -> None:
+        """
+        Precompute and store every (param_key, offset) interpolator in its Redis hash.
+        """
+
+        if self._loading_tile:
+            return
+        self._loading_tile = True
+
+        try:
+            param_keys = self.param_keys.copy()
+            for param_key in param_keys:
+                self._preload_param(param_key)
+            logger.info(f"[preload_tiles] Preloading {len(self.offsets)} offsets × {len(self.param_keys)}")
+        except Exception as e:
+            logger.error(f"Tile preload exeception {e}", exc_info=True);
+        self._loading_tile = False
+
 
     def preload_tiles(self) -> None:
         """

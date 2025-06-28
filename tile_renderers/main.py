@@ -340,7 +340,7 @@ async def _prewarm_loop(
                     # loop = asyncio.get_running_loop()
                     # last_future =  prewarm_process_executor.submit(run_workers)
                 # await layer_cache.preloader()
-                await asyncio.to_thread(app.state.layer_cache.preloader)
+                await asyncio.to_thread(app.state.layer_cache.preloader_single_thread)
                     # last_future = loop.run_in_executor(
                     #     None,
                     #     layer_cache.preloader #layer_cache.preload_to_local()
