@@ -613,7 +613,8 @@ class MemoryLayerCache:
                 self._load_offset_for_param_key(param_key, off, grbs, pm, search)
               #
             if grbs is not None:
-                grbs.close() # type: ignore
+                with self._ecodes_lock:
+                    grbs.close() # type: ignore
         except Exception as e:
             logger.error(f"Computation ERROR in preload slices: {e}", exc_info=True)
 
