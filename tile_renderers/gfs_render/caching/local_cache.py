@@ -1,9 +1,7 @@
 import threading
-import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, List
-from .cache import ICacheBackend
-
+from .cache import ICacheBackend  # or wherever your interface lives
 import logging
 # Configure logging for debugging purpose
 logger = logging.getLogger(__name__)
@@ -12,18 +10,18 @@ class LocalStorage(ICacheBackend):
     """
     A simple in‐memory key/value store with per‐key TTL.
     Keys added with expire=0 never expire (unless explicitly deleted).
-    You can call `extend(key, new_ttl_seconds)` at any time to reset a key's TTL.
+    You can call `extend(key, ttl_seconds)` at any time to reset a key's TTL.
     A background daemon thread removes expired keys automatically.
     """
 
     def __init__(self):
+        # The actual data
         self.data: Dict[str, Any] = {}
-        # data_time maps key -> {"created_at": datetime, "ttl": int}
+        # TTL info: key -> {"created_at": datetime, "ttl": int}
         self.data_time: Dict[str, Dict[str, Any]] = {}
+
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
-
-        # Prepare (but don’t start) the cleaner thread
         self._cleaner_thread = threading.Thread(
             target=self._cleanup_thread,
             daemon=True,
@@ -32,7 +30,7 @@ class LocalStorage(ICacheBackend):
         self._started = False
 
     def _ensure_cleaner_running(self):
-        """Start the cleaner thread once, on first call."""
+        """Start the cleaner thread exactly once."""
         if not self._started:
             with self._lock:
                 if not self._started:
@@ -44,127 +42,283 @@ class LocalStorage(ICacheBackend):
             if key not in self.data:
                 return False
             if key not in self.data_time:
+                # no TTL => immortal
                 return True
             return not self._is_expired(key)
 
-    def set(self, key: str, value: Any, expire: int = 0):
-        """
-        Store `value` under `key`.  If expire > 0, the key will live for `expire` seconds.
-        If expire == 0, key never expires (until manually deleted or overwritten).
-        """
-        with self._lock:
-            self.data[key] = value
-            if expire > 0:
-                self._set_key_to_now(key, expire)
-            else:
-                self.data_time.pop(key, None)
-
-        self._ensure_cleaner_running()
-
     def get(self, key: str) -> Optional[Any]:
         """
-        Retrieve the value if present and not expired.  If expired, delete and return None.
+        Return the value if present and not expired;
+        if expired, delete it and return None.
         """
         with self._lock:
             if key not in self.data:
                 return None
             if key in self.data_time and self._is_expired(key):
-                # Expired—remove and return None
+                # expired → remove
                 self._delete_no_lock(key)
                 return None
             return self.data[key]
+        # ensure the cleaner thread is alive
+        self._ensure_cleaner_running()
+
+    def set(self, key: str, value: Any, expire: int = 0):
+        """
+        Store `value` under `key`.  If `expire>0`, the key will live for that many seconds.
+        If `expire==0`, the key never expires (unless deleted manually).
+        """
+        with self._lock:
+            self.data[key] = value
+            if expire > 0:
+                self.data_time[key] = {
+                    "created_at": datetime.now(),
+                    "ttl": expire
+                }
+            else:
+                # remove any old TTL info
+                self.data_time.pop(key, None)
+
+        self._ensure_cleaner_running()
 
     def delete(self, key: str):
-        """
-        Remove a key (and its TTL) if present.
-        """
         with self._lock:
             self._delete_no_lock(key)
         self._ensure_cleaner_running()
 
     def extend(self, key: str, expire: int = 0):
         """
-        If `expire > 0` and `key` exists, reset its TTL to `expire` seconds from now.
-        Even if key was originally set with no TTL, this will add a TTL now.
+        If `expire>0` and `key` exists, reset its TTL to `expire` seconds from now.
+        Adding a TTL to an otherwise immortal key is also supported.
         """
         with self._lock:
             if key in self.data and expire > 0:
-                self._set_key_to_now(key, expire)
+                self.data_time[key] = {
+                    "created_at": datetime.now(),
+                    "ttl": expire
+                }
         self._ensure_cleaner_running()
 
     def _is_expired(self, key: str) -> bool:
-        """
-        Return True if `key` is known to have a TTL and that TTL has elapsed.
-        """
         details = self.data_time.get(key)
         if not details:
             return False
-        return (datetime.now() - details["created_at"]).total_seconds() > details["ttl"]
-
-    def _set_key_to_now(self, key: str, expire: int):
-        """
-        Reset or create the TTL entry for `key` to `expire` seconds from this moment.
-        """
-        self.data_time[key] = {
-            "created_at": datetime.now(),
-            "ttl": expire
-        }
+        return (datetime.now() - details["created_at"]).total_seconds() >= details["ttl"]
 
     def _delete_no_lock(self, key: str):
-        """
-        Delete `key` and its TTL from both dicts without acquiring lock.
-        (Caller must hold self._lock already.)
-        """
+        """Remove `key` from both data and TTL maps (caller must hold lock)."""
         self.data.pop(key, None)
         self.data_time.pop(key, None)
 
     def stop(self):
-        """
-        Stop the background cleaner thread (blocking until it finishes).
-        """
+        """Signal the cleaner thread to exit, then join it."""
         self._stop_event.set()
         if self._started:
             self._cleaner_thread.join()
+        self._started = False
 
     def _cleanup_thread(self):
         """
-        Background thread: at each iteration, recompute “how many seconds until
-        the next key is due to expire,” then sleep exactly that many seconds
-        (capped at 60 s).  When it wakes, it deletes any expired key(s), then
-        recomputes the next sleep interval.
+        Loop forever (until stop()), each time:
+          1) Scan TTL entries and delete any expired keys.
+          2) Compute the minimum remaining TTL among all keys (if any).
+          3) Sleep min(remaining, 60) seconds before repeating.
+        This ensures we never wait longer than needed for the next expiry,
+        but also wake up at least every minute to pick up new keys.
         """
         while not self._stop_event.is_set():
+            next_expiry: Optional[float] = None
+            sleep_for = 60
             with self._lock:
-                next_sleep = 60
-                if self.data_time:
-                    try:
-                        now = datetime.now()
-                        soonest: Optional[float] = None
-                        expired: List[str] = []
-
-                        # Find expired keys and next expiration time
-                        for k, details in list(self.data_time.items()):
-                            expires_at = details["created_at"] + timedelta(seconds=details["ttl"])
-                            delta = (expires_at - now).total_seconds()
-                            if delta <= 0:
-                                expired.append(k)
-                            else:
-                                if soonest is None or delta < soonest:
-                                    soonest = delta
-
-                        # Remove expired
-                        for k in expired:
-                            self._delete_no_lock(k)
-
-                        # Determine sleep interval
-                        if soonest is None:
-                            next_sleep = 60
+                try:
+                    now = datetime.now()
+                    # collect expired keys
+                    expired: List[str] = []
+                    for k, details in list(self.data_time.items()):
+                        expires_at = details["created_at"] + timedelta(seconds=details["ttl"])
+                        delta = (expires_at - now).total_seconds()
+                        if delta <= 0:
+                            expired.append(k)
                         else:
-                            next_sleep = min(soonest, 60)
-                    except Exception as e:
-                        logger.error(f"Failed thread cleanup in LocalStorage {e}")
+                            if next_expiry is None or delta < next_expiry:
+                                next_expiry = delta
+                    # delete them
+                    for k in expired:
+                        self._delete_no_lock(k)
 
-            time.sleep(next_sleep)
+                    # decide how long to sleep
+                    if next_expiry is not None:
+                        sleep_for = min(next_expiry, 60)
+                except Exception as e:
+                    logger.error(f"LocalStorage expiration check error: {e}")
+            self._stop_event.wait(timeout=sleep_for)
+
+# import threading
+# import time
+# from datetime import datetime, timedelta
+# from typing import Any, Dict, Optional, List
+# from .cache import ICacheBackend
+
+# import logging
+# # Configure logging for debugging purpose
+# logger = logging.getLogger(__name__)
+
+# class LocalStorage(ICacheBackend):
+#     """
+#     A simple in‐memory key/value store with per‐key TTL.
+#     Keys added with expire=0 never expire (unless explicitly deleted).
+#     You can call `extend(key, new_ttl_seconds)` at any time to reset a key's TTL.
+#     A background daemon thread removes expired keys automatically.
+#     """
+
+#     def __init__(self):
+#         self.data: Dict[str, Any] = {}
+#         # data_time maps key -> {"created_at": datetime, "ttl": int}
+#         self.data_time: Dict[str, Dict[str, Any]] = {}
+#         self._lock = threading.Lock()
+#         self._stop_event = threading.Event()
+
+#         # Prepare (but don’t start) the cleaner thread
+#         self._cleaner_thread = threading.Thread(
+#             target=self._cleanup_thread,
+#             daemon=True,
+#             name="LocalStorage-Cleaner"
+#         )
+#         self._started = False
+
+#     def _ensure_cleaner_running(self):
+#         """Start the cleaner thread once, on first call."""
+#         if not self._started:
+#             with self._lock:
+#                 if not self._started:
+#                     self._started = True
+#                     self._cleaner_thread.start()
+
+#     def available(self, key: str) -> bool:
+#         with self._lock:
+#             if key not in self.data:
+#                 return False
+#             if key not in self.data_time:
+#                 return True
+#             return not self._is_expired(key)
+
+#     def set(self, key: str, value: Any, expire: int = 0):
+#         """
+#         Store `value` under `key`.  If expire > 0, the key will live for `expire` seconds.
+#         If expire == 0, key never expires (until manually deleted or overwritten).
+#         """
+#         with self._lock:
+#             self.data[key] = value
+#             if expire > 0:
+#                 self._set_key_to_now(key, expire)
+#             else:
+#                 self.data_time.pop(key, None)
+
+#         self._ensure_cleaner_running()
+
+#     def get(self, key: str) -> Optional[Any]:
+#         """
+#         Retrieve the value if present and not expired.  If expired, delete and return None.
+#         """
+#         with self._lock:
+#             if key not in self.data:
+#                 return None
+#             if key in self.data_time and self._is_expired(key):
+#                 # Expired—remove and return None
+#                 self._delete_no_lock(key)
+#                 return None
+#             return self.data[key]
+
+#     def delete(self, key: str):
+#         """
+#         Remove a key (and its TTL) if present.
+#         """
+#         with self._lock:
+#             self._delete_no_lock(key)
+#         self._ensure_cleaner_running()
+
+#     def extend(self, key: str, expire: int = 0):
+#         """
+#         If `expire > 0` and `key` exists, reset its TTL to `expire` seconds from now.
+#         Even if key was originally set with no TTL, this will add a TTL now.
+#         """
+#         with self._lock:
+#             if key in self.data and expire > 0:
+#                 self._set_key_to_now(key, expire)
+#         self._ensure_cleaner_running()
+
+#     def _is_expired(self, key: str) -> bool:
+#         """
+#         Return True if `key` is known to have a TTL and that TTL has elapsed.
+#         """
+#         details = self.data_time.get(key)
+#         if not details:
+#             return False
+#         return (datetime.now() - details["created_at"]).total_seconds() > details["ttl"]
+
+#     def _set_key_to_now(self, key: str, expire: int):
+#         """
+#         Reset or create the TTL entry for `key` to `expire` seconds from this moment.
+#         """
+#         self.data_time[key] = {
+#             "created_at": datetime.now(),
+#             "ttl": expire
+#         }
+
+#     def _delete_no_lock(self, key: str):
+#         """
+#         Delete `key` and its TTL from both dicts without acquiring lock.
+#         (Caller must hold self._lock already.)
+#         """
+#         self.data.pop(key, None)
+#         self.data_time.pop(key, None)
+
+#     def stop(self):
+#         """
+#         Stop the background cleaner thread (blocking until it finishes).
+#         """
+#         self._stop_event.set()
+#         if self._started:
+#             self._cleaner_thread.join()
+
+#     def _cleanup_thread(self):
+#         """
+#         Background thread: at each iteration, recompute “how many seconds until
+#         the next key is due to expire,” then sleep exactly that many seconds
+#         (capped at 60 s).  When it wakes, it deletes any expired key(s), then
+#         recomputes the next sleep interval.
+#         """
+#         while not self._stop_event.is_set():
+#             with self._lock:
+#                 next_sleep = 60
+#                 if self.data_time:
+#                     try:
+#                         now = datetime.now()
+#                         soonest: Optional[float] = None
+#                         expired: List[str] = []
+
+#                         # Find expired keys and next expiration time
+#                         for k, details in list(self.data_time.items()):
+#                             expires_at = details["created_at"] + timedelta(seconds=details["ttl"])
+#                             delta = (expires_at - now).total_seconds()
+#                             if delta <= 0:
+#                                 expired.append(k)
+#                             else:
+#                                 if soonest is None or delta < soonest:
+#                                     soonest = delta
+
+#                         # Remove expired
+#                         for k in expired:
+#                             self._delete_no_lock(k)
+
+#                         # Determine sleep interval
+#                         if soonest is None:
+#                             next_sleep = 60
+#                         else:
+#                             next_sleep = min(soonest, 60)
+#                     except Exception as e:
+#                         logger.error(f"Failed thread cleanup in LocalStorage {e}")
+
+#             time.sleep(next_sleep)
 # class LocalStorage:
 #     """
 #     A simple in‐memory key/value store with per‐key TTL.

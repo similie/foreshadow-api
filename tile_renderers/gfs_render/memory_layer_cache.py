@@ -593,8 +593,6 @@ class MemoryLayerCache:
         # with self._ecodes_lock:
         search: Dict[str, Any] = {}
         grbs = None
-        # if not grbs:
-        #     return
         try:
             for param_key in param_keys:
                 key_name = param_key.get("param_key")
@@ -606,12 +604,15 @@ class MemoryLayerCache:
                     self._localStorage.extend(key, self._ttl);
                     continue
                 # it goes a lot faster if we do not have to open the file
+                logger.info(f"\tProccessing preload for {key_name} at offset {off}")
                 if grbs is None:
-                  grbs = self.model_service._get_raw_grib(self.model, off, search)
-                  if grbs is None:
-                      continue
-
+                  with self._ecodes_lock:
+                    grbs = self.model_service._get_raw_grib(self.model, off, search)
+                    if grbs is None:
+                        continue
                 self._load_offset_for_param_key(param_key, off, grbs, pm, search)
+              #
+            if grbs is not None:
                 grbs.close() # type: ignore
         except Exception as e:
             logger.error(f"Computation ERROR in preload slices: {e}", exc_info=True)
@@ -633,31 +634,12 @@ class MemoryLayerCache:
             cfg = SystemConfig().get_default_forecast_json()
             param_keys = cfg["param_keys"]
             logger.info(f"RUNNING THESE OFFSETS {offsets}")
-            # def _compute_for_offset(off: int):
-            #     with self._ecodes_lock:
-            #         search: Dict[str, Any] = {}
-            #         grbs = self.model_service._get_raw_grib(self.model, off, search)
-            #         if not grbs:
-            #             return
-            #         try:
-            #             for param_key in param_keys:
-            #                 self._load_offset_for_param_key(param_key, off, grbs, pm, search)
-            #         except Exception as e:
-            #             logger.error(f"Computation ERROR in preload slices: {e}", exc_info=True)
-            #         grbs.close() # type: ignore
+
             for off in offsets:
                 self._compute_for_offset(off, param_keys, pm)
+                total_length += 1
                 logger.info(f"PRELOAD EXECUTION COMPLETED {total_length} of {length}")
-            # workers = self.get_worker_count()
-            # logger.info(f"WORKERS {workers}")
-            # with ThreadPoolExecutor(max_workers=workers) as exe:
-            #     try:
-            #         futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
-            #         for fut in as_completed(futures):
-            #             total_length += 1
-            #             logger.info(f"PRELOAD EXECUTION COMPLETED {total_length} of {length}")
-            #     except Exception as e:
-            #         logger.error(f"Preload slices execution error {e}", exc_info=True)
+
         except Exception as e:
             logger.error(f"Preload slices thread failure {e}", exc_info=True)
         self._loading = False
@@ -712,18 +694,19 @@ class MemoryLayerCache:
         logger.info(f"[Preload] Param={pk}")
         for off in range(7):
             with self._ecodes_lock:
-                ip = self.model_service.get_or_build_interpolator(
+                self.model_service.get_or_build_interpolator(
                     self.model, pk, off,
                     entry.get("level"), entry.get("typeOfLevel"), entry.get("stepType")
                 )
-                if not ip:
-                    continue
+                # if not ip:
+                #     continue
         logger.info(f"[Preload] Completed param {pk}")
 
     def preloader_single_thread(self):
         try:
             self.preload_slices_single_thread()
             self.preload_tiles_single_thread()
+            self.set_initialized()
         except Exception as e:
             logger.error(f'Failed to run single threaded preloader {e}', exc_info=True)
 

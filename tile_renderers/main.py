@@ -336,33 +336,7 @@ async def _prewarm_loop(
             # pick random lat/lon in valid ranges
             logger.info("PRELOAD EXECUTION STARTED")
             try:
-                # if last_future is None or last_future.done():
-                    # loop = asyncio.get_running_loop()
-                    # last_future =  prewarm_process_executor.submit(run_workers)
-                # await layer_cache.preloader()
                 await asyncio.to_thread(app.state.layer_cache.preloader_single_thread)
-                    # last_future = loop.run_in_executor(
-                    #     None,
-                    #     layer_cache.preloader #layer_cache.preload_to_local()
-                    # )
-                    # last_future = app.state.prewarm_executor.submit(
-                    #     layer_cache.preloader #layer_cache.preload_to_local()
-                    # )
-                # else:
-                #     logger.info("Previous prewarm still running, skipping this cycle")
-
-                # await asyncio.sleep(interval_s)
-                # layer_cache.loadOffset();
-                # await asyncio.to_thread(run_workers)
-                # await loop.run_in_executor(
-                #    prewarm_executor,
-                #    run_workers #layer_cache.preload_to_local()
-                # )
-                # prewarm_process_executor.submit(do_prewarm)
-                # await loop.run_in_executor(
-                #    None,
-                #    lambda: run_workers() #layer_cache.preload_to_local()
-                # )
             except Exception as exc:
                 logger.error(f"Pre-warm failed {exc}", exc_info=True)
             # We do this so if a multi-process server instance
@@ -383,7 +357,7 @@ def start_prewarm():
     # app.state.prewarm_executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 1)
     loop = asyncio.get_running_loop()
     # run every 30 minutes
-    loop.create_task(_prewarm_loop(660.0 * 3))
+    loop.create_task(_prewarm_loop(66.0 * 3))
 #———————————————————————————————
 # 2) start it on app startup
 #———————————————————————————————
