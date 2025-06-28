@@ -661,24 +661,24 @@ class MemoryLayerCache:
             cfg = SystemConfig().get_default_forecast_json()
             param_keys = cfg["param_keys"]
             logger.info(f"RUNNING THESE OFFSETS {offsets}")
-            def _compute_for_offset(off: int):
-                with self._ecodes_lock:
-                    search: Dict[str, Any] = {}
-                    grbs = self.model_service._get_raw_grib(self.model, off, search)
-                    if not grbs:
-                        return
-                    try:
-                        for param_key in param_keys:
-                            self._load_offset_for_param_key(param_key, off, grbs, pm, search)
-                    except Exception as e:
-                        logger.error(f"Computation ERROR in preload slices: {e}", exc_info=True)
-                    grbs.close() # type: ignore
+            # def _compute_for_offset(off: int):
+            #     with self._ecodes_lock:
+            #         search: Dict[str, Any] = {}
+            #         grbs = self.model_service._get_raw_grib(self.model, off, search)
+            #         if not grbs:
+            #             return
+            #         try:
+            #             for param_key in param_keys:
+            #                 self._load_offset_for_param_key(param_key, off, grbs, pm, search)
+            #         except Exception as e:
+            #             logger.error(f"Computation ERROR in preload slices: {e}", exc_info=True)
+            #         grbs.close() # type: ignore
 
             workers = self.get_worker_count()
             logger.info(f"WORKERS {workers}")
             with ThreadPoolExecutor(max_workers=workers) as exe:
                 try:
-                    futures = {exe.submit(_compute_for_offset, off): off for off in offsets}
+                    futures = {exe.submit(self._compute_for_offset, off, param_keys, pm): off for off in offsets}
                     for fut in as_completed(futures):
                         total_length += 1
                         logger.info(f"PRELOAD EXECUTION COMPLETED {total_length} of {length}")
