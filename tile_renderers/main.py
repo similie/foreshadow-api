@@ -336,7 +336,7 @@ async def _prewarm_loop(
             # pick random lat/lon in valid ranges
             logger.info("PRELOAD EXECUTION STARTED")
             try:
-                await asyncio.to_thread(app.state.layer_cache.preloader)
+                await asyncio.to_thread(app.state.layer_cache.preloader_single_thread)
             except Exception as exc:
                 logger.error(f"Pre-warm failed {exc}", exc_info=True)
             # We do this so if a multi-process server instance
