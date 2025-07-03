@@ -34,10 +34,10 @@ class SystemConfig:
         data = '''{
             "model": "gfs",
             "param_keys": [{
-                  param_key: "total-cloud-cover",
-                  level: 0,
-                  typeOfLevel: "atmosphere",
-                  stepType: "avg"
+                  "param_key": "total-cloud-cover",
+                  "level": 0,
+                  "typeOfLevel": "atmosphere",
+                  "stepType": "avg"
                 },{
                 "param_key": "surface-pressure",
                 "typeOfLevel": "surface",
