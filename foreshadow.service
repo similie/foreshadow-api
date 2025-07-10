@@ -9,13 +9,13 @@ After=network.target
 
 [Service]
 User=root
-WorkingDirectory=/root/Sites/hyphen-forecaster/tile_renderers
-ExecStart=/bin/bash -c 'source /root/Sites/hyphen-forecaster/.venv/bin/activate && exec uvicorn main:app --host 0.0.0.0 --port 5001 --workers 8'
+WorkingDirectory=/root/foreshadow-api/tile_renderers
+ExecStart=/bin/bash -c 'source /root/foreshadow-api/.venv/bin/activate && exec uvicorn main:app --host 0.0.0.0 --port 5001 --workers 4'
 
 Restart=always
 
-StandardOutput=append:/root/Sites/hyphen-forecaster/fastapi.log
-StandardError=append:/root/Sites/hyphen-forecaster/fastapi.log
+StandardOutput=append:/root/foreshadow-api/fastapi.log
+StandardError=append:/root/foreshadow-api/fastapi.log
 
 [Install]
 WantedBy=multi-user.target

@@ -14,3 +14,9 @@ class ICacheBackend:
 
     def delete(self, key: str):
         raise NotImplementedError
+
+    def available(self, key: str) -> bool:
+        return False
+
+    def extend(self, key: str, expire: int = 0):
+        raise NotImplementedError

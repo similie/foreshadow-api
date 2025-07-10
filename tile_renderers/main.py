@@ -15,10 +15,13 @@ A FastAPI server that:
 
 Run with multiple worker processes (via Uvicorn) to help with CPU‐bound work.
 """
+import faulthandler, sys
+faulthandler.enable(file=sys.stderr, all_threads=True)
 import json
 import os
 import io
 import logging
+import random
 from typing import  List, Optional, Union
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
@@ -26,21 +29,25 @@ from fastapi.responses import StreamingResponse, JSONResponse
 import asyncio
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
-# Import your project modules (adjust paths as needed)
-from gfs_render import ModelService, RedisCacheBackend, TileRendering
-# from gfs_render.time_logger import TimeLogger
-
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+from dotenv import load_dotenv, find_dotenv
+# from concurrent.futures import ThreadPoolExecutor
+from gfs_render import ModelService, RedisCacheBackend, TileRendering, MemoryLayerCache, LocalStorage
+# logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+env_file = find_dotenv()                     # returns path or ''
+logger.info(f"Loading .env from: {env_file}")
+load_dotenv(env_file, verbose=True)
+# Configure logging
 
 # Initialize the cache backend and ModelService.
-backend_cache = RedisCacheBackend()
-# Set preload_layers=True if you want to prewarm interpolators on startup.
-model_service = ModelService(backend_cache)
-tile_renderer = TileRendering(model_service)
+# local_cache = LocalStorage()
+# backend_cache = RedisCacheBackend()
+# # Set preload_layers=True if you want to prewarm interpolators on startup.
+# model_service = ModelService(backend_cache, local_cache)
+# tile_renderer = TileRendering(model_service)
+# layer_cache = MemoryLayerCache(
+#     model_service
+# )
 
 app = FastAPI(title="Global Norm Map Server", version="1.0")
 # (Optional) Add CORS middleware if needed.
@@ -95,24 +102,24 @@ def serve_tile_route(
 ):
     # timer = TimeLogger()
     # timer.log("I STARTED MY RENDER 1")
-    if not model_service.valid_model(model):
+    if not app.state.model_service.valid_model(model):
         raise HTTPException(status_code=404, detail="Unknown model.")
-    if not tile_renderer.valid_zxy(z, x, y):
+    if not app.state.tile_renderer.valid_zxy(z, x, y):
         raise HTTPException(status_code=404, detail="Invalid tile coordinates.")
 
-    cache_key = model_service.create_tile_cache_key(model, param_key, typeOfLevel, hour_offset, z, x, y, level, stepType)
+    cache_key = app.state.model_service.create_tile_cache_key(model, param_key, typeOfLevel, hour_offset, z, x, y, level, stepType)
     try:
-        cached_tile = backend_cache.get(cache_key)
+        cached_tile = app.state.backend_cache.get(cache_key)
         if cached_tile:
             return StreamingResponse(io.BytesIO(cached_tile), media_type="image/png")
     except Exception as e:
         logger.error(f"Error reading cache: {e}")
 
-    data = tile_renderer.render_tile(model, param_key, hour_offset, z, x, y, level, typeOfLevel, stepType)
+    data = app.state.tile_renderer.render_tile(model, param_key, hour_offset, z, x, y, level, typeOfLevel, stepType)
     if data is None:
         raise HTTPException(status_code=404, detail="No tile data found")
     try:
-        backend_cache.set(cache_key, data, 15 * 60)
+        app.state.backend_cache.set(cache_key, data, 15 * 60)
     except Exception as e:
         logger.error(f"Error writing cache: {e}")
     # timer.log("I ENDED MY RENDER 2")
@@ -122,7 +129,7 @@ def serve_tile_route(
 @app.get("/list_parameters/{model}/{hour_offset}")
 def list_params(model: str, hour_offset: int):
     try:
-        params = model_service.build_paramter_name_list(model, hour_offset)
+        params = app.state.model_service.build_paramter_name_list(model, hour_offset)
         return JSONResponse(content={"parameters": sorted(list(params.values()))})
     except Exception as e:
         logger.error(f"Error listing for {model},{hour_offset}: {e}")
@@ -132,9 +139,12 @@ def list_params(model: str, hour_offset: int):
 @app.get("/parameters")
 def parameters_route():
     offset = 0
-    results = model_service.parameter_definitions(offset)
-    return JSONResponse(content={"models": results})
-
+    try:
+        results = app.state.model_service.parameter_definitions(offset)
+        return JSONResponse(content={"models": results})
+    except Exception as e:
+        logger.error(f"Error listing parameters: {e}")
+        raise HTTPException(status_code=500, detail="Parameter extraction error")
 
 @app.post("/point", response_model=dict)
 @app.post("/point/{hour_offset}", response_model=dict)
@@ -156,7 +166,7 @@ async def point_forecast_params_route(request: Request, hour_offset: int = 0):
         raise HTTPException(status_code=400, detail="Missing required fields in JSON body.")
 
     try:
-        values = model_service.iterate_multiple_keys_against_geo_point(
+        values = app.state.model_service.iterate_multiple_keys_against_geo_point(
             model,
             search_parameters,
             lat,
@@ -203,11 +213,10 @@ async def forecast_streaming_route(request: Request):
         asyncio.run_coroutine_threadsafe(progress_queue.put(message), loop)
 
     loop = asyncio.get_event_loop()
-
     # Run the forecast computation in an executor so it doesn't block the event loop.
     timeseries_future = loop.run_in_executor(
         None,
-        lambda: model_service.get_point_forecast_timeseries(
+        lambda: app.state.model_service.get_point_forecast_timeseries(
             model=model,
             param_keys=param_keys,
             lat=lat,
@@ -236,6 +245,31 @@ async def forecast_streaming_route(request: Request):
         yield f"{json.dumps({'timeseries': timeseries})}\n\n"
 
     return StreamingResponse(stream_forecast(), media_type="text/event-stream")
+
+@app.get("/point", response_model=dict)
+def forecast_point(lat: float, lon: float, hour_offset: int = 0):
+    if app.state.layer_cache.is_loading():
+        raise HTTPException(status_code=404, detail="Data is not ready for output.")
+    try:
+        result = app.state.layer_cache.find_current_slice(lat, lon, hour_offset)
+        if not result:
+            raise HTTPException(status_code=404, detail="No data for that offset.")
+        return JSONResponse(content=result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/forecast")
+def forecast(lat: float, lon: float, hour_offset: int = 0):
+    if app.state.layer_cache.is_loading():
+        raise HTTPException(status_code=404, detail="Data is not ready for output.")
+    try:
+        result = app.state.layer_cache.find_slice(lat, lon, hour_offset)
+        if not result:
+            raise HTTPException(status_code=404, detail="No data for that offset.")
+        return JSONResponse(content=result)
+    except Exception as e:
+        logger.error(f"Error in preconfigured forecast: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/forecast")
 async def forecast_route(request: Request):
@@ -269,25 +303,83 @@ async def forecast_route(request: Request):
     level_arg = data.get("level")
     user_tof = data.get("typeOfLevel")
     step_type = data.get("stepType")
-    timeseries = model_service.get_point_forecast_timeseries(
-        model=model,
-        param_keys=param_keys,
-        lat=lat,
-        lon=lon,
-        start_hour_offset=start_hour_offset,
-        total_days=total_days,
-        step_hours=step_hours,
-        level=level_arg,
-        type_of_level=user_tof,
-        step_type=step_type
-    )
-    if not timeseries:
-        return JSONResponse(content=[], status_code=200)
-    return JSONResponse(content=timeseries)
 
+    try:
+        timeseries = app.state.model_service.get_point_forecast_timeseries(
+            model=model,
+            param_keys=param_keys,
+            lat=lat,
+            lon=lon,
+            start_hour_offset=start_hour_offset,
+            total_days=total_days,
+            step_hours=step_hours,
+            level=level_arg,
+            type_of_level=user_tof,
+            step_type=step_type
+        )
+        if not timeseries:
+            return JSONResponse(content=[], status_code=200)
+        return JSONResponse(content=timeseries)
+    except Exception as e:
+        logger.error(f"Timeseries exception error {e}")
+        raise HTTPException(status_code=400, detail="No JSON body provided.")
+#———————————————————————————————
+# 1) the “pre-warm” worker
+#———————————————————————————————
+async def _prewarm_loop(
+    interval_s: float = 60.0,
+):
+    try:
+
+        # last_future = None
+        while True:
+            # pick random lat/lon in valid ranges
+            logger.info("PRELOAD EXECUTION STARTED")
+            try:
+                await asyncio.to_thread(app.state.layer_cache.preloader_single_thread)
+            except Exception as exc:
+                logger.error(f"Pre-warm failed {exc}", exc_info=True)
+            # We do this so if a multi-process server instance
+            # we do not have all of our pre-warmers running at the same time
+            choice = random.randint(0, 5)
+            spread_time = choice * 60
+            sleep = interval_s + spread_time
+            logger.info(f"Sleeping for {sleep / 60}")
+            await asyncio.sleep(sleep)
+    except Exception as outer_exc:
+        logger.critical(f"_prewarm_loop has died with: {outer_exc}", exc_info=True)
+        start_prewarm()
+
+
+
+def start_prewarm():
+    logger.info("GETTING STARTING WITH PREWARMING")
+    # app.state.prewarm_executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 1)
+    loop = asyncio.get_running_loop()
+    # run every 30 minutes
+    loop.create_task(_prewarm_loop(660.0 * 3))
+#———————————————————————————————
+# 2) start it on app startup
+#———————————————————————————————
+@app.on_event("startup")
+async def kick_off_prewarm():
+    try:
+        local_cache = LocalStorage()
+        app.state.backend_cache = RedisCacheBackend()
+        # Set preload_layers=True if you want to prewarm interpolators on startup.
+        app.state.model_service = ModelService(app.state.backend_cache, local_cache)
+        app.state.tile_renderer = TileRendering(app.state.model_service)
+        app.state.layer_cache = MemoryLayerCache(
+            app.state.model_service
+        )
+    except Exception as e:
+        logger.critical(f"Application start failed: {e}", exc_info=True)
+        return
+
+    start_prewarm()
 ###############################################################################
 # Main entry point
 ###############################################################################
 if __name__ == "__main__":
     # Run with multiple worker processes to distribute CPU-bound tasks.
-    uvicorn.run("main:app", host="0.0.0.0", port=5001, reload=False, workers=os.cpu_count() or 4)
+    uvicorn.run("main:app", host="0.0.0.0", port=5001, reload=True, workers=os.cpu_count() or 4)
