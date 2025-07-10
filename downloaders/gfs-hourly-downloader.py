@@ -18,8 +18,6 @@ import re
 import shutil
 from datetime import datetime, timedelta, UTC
 from dotenv import load_dotenv, find_dotenv
-import json
-
 env_file = find_dotenv()                     # returns path or ''
 print("Loading .env from:", env_file)
 load_dotenv(env_file, verbose=True)
@@ -37,7 +35,7 @@ FILE_NAME_PATTERNS = [
 ]
 
 #LOCAL_BASE_PATH = "/Volumes/ModelBackup/HyphenForecaster/gfs_slim"
-LOCAL_BASE_PATH = os.getenv("GRIB_FILES_PATH", "/Users/guernica0131/Sites/hyphen-forecaster/grib")
+LOCAL_BASE_PATH = os.getenv("GRIB_FILES_PATH", "~/Sites/hyphen-forecaster/grib")
 MAX_DAYS = 5
 STATE_FILE = os.path.join(LOCAL_BASE_PATH, "downloaded_index.json")
 # These will be used *per hour* depending on whether it's 00 or not:

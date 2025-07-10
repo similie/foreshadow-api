@@ -67,6 +67,13 @@ uvicorn main:app --host 0.0.0.0 --port 5001 --workers $(nproc)
 
 Replace `$(nproc)` with the desired number of worker processes.
 
+## Env Variables
+You can set a .env file anywhere in a root directory of your instance and it will recursively find it.
+- `GRIB_FILES_PATH=/root/foreshadow-api/grib # Where are the grib files located. Required`
+- `REDIS_HOST=localhost`
+- `REDIS_PORT=6379`
+- `REDIS_DB=0`
+
 ## Dependencies
 - python3.12
 - FastAPI

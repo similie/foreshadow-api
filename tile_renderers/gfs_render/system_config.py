@@ -106,39 +106,13 @@ class SystemConfig:
             "total_days": 5,
             "step_hours": 3
         }'''
-
-        # data = '''{
-        #     "model": "gfs",
-        #     "param_keys": [{
-        #         "param_key": "total-precipitation",
-        #         "typeOfLevel": "surface",
-        #         "level": 0,
-        #         "stepType": "accum",
-        #         "grbSearch": {
-        #             "terms": {},
-        #             "template": {
-        #                 "startStep": 0,
-        #                 "endStep": "{forecast_hr}"
-        #             },
-        #             "conditions": {
-        #                 "endStep": "int"
-        #             }
-        #         }
-        #     }],
-        #     "lat": 0,
-        #     "lon": 0,
-        #     "start_hour_offset": 0,
-        #     "total_days": 5,
-        #     "step_hours": 3
-        # }'''
-        # return self.get_rainfall_test()
         return json.loads(data)
 
     def __init__(self):
         self.WEB_MERCATOR_CONSTANT = 20037508.342789244
         self.TILE_SIZE = 256
         self.decimation = 2
-        self.GRIB_FILES_PATH =  os.getenv("GRIB_FILES_PATH", "/home/guernica0131/Sites/foreshadow-api/grib")
+        self.GRIB_FILES_PATH =  os.getenv("GRIB_FILES_PATH", "~/Sites/foreshadow-api/grib")
 
         self.MODEL_MAP = {
             "gfs": {

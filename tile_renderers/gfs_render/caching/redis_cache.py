@@ -3,7 +3,7 @@ import os
 from typing import Any, Optional
 from .cache import ICacheBackend
 class RedisCacheBackend(ICacheBackend):
-    def __init__(self, host=os.getenv("REDIS_HOST", "localhost"), port=6379, db=0):
+    def __init__(self, host=os.getenv("REDIS_HOST", "localhost"), port=int(os.getenv("REDIS_PORT", 6379)), db=int(os.getenv("REDIS_DB", 0))):
         self._client = redis.StrictRedis(host=host, port=port, db=db)
 
     @property
