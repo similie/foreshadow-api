@@ -6,6 +6,7 @@ cached_data
 output.*
 output_tiles
 grib
+data
 __pycache__
 .ropeproject
 .env

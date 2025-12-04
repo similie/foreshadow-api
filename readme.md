@@ -1,6 +1,6 @@
-# Foreshadow API
+# 4Shadow API
 
-Foreshadow API provides efficient, real-time access to Global Forecast System (GFS) data, optimized for point-based forecasts and map visualizations. Leveraging FastAPI, it offers streamlined, performant endpoints tailored for applications requiring precise weather forecasting data.
+4Shadow API provides efficient, real-time access to Global Forecast System (GFS) data, optimized for point-based forecasts and map visualizations. Leveraging FastAPI, it offers streamlined, performant endpoints tailored for applications requiring precise weather forecasting data.
 
 ## Available API Routes
 
@@ -84,17 +84,17 @@ You can set a .env file anywhere in a root directory of your instance and it wil
 
 Ensure Redis is installed and running to enable caching.
 
-Foreshadow API is designed to deliver high-performance weather forecasts tailored specifically to your application's geographical needs.
+4Shadow API is designed to deliver high-performance weather forecasts tailored specifically to your application's geographical needs.
 
 ## Contributions & Community
 
 Want to help build the future of weather insights? We're open-source and community-driven!
 
-Check out our [CONTRIBUTING.md](./CONTRIBUTING.md) file for guidance on how you can contribute to Parabl Foreshadow and make the world a bit safer, one forecast at a time!
+Check out our [CONTRIBUTING.md](./CONTRIBUTING.md) file for guidance on how you can contribute to Parabl 4Shadow and make the world a bit safer, one forecast at a time!
 
 ## Contributors
 
-Huge thanks to our awesome contributors for helping Parabl Foreshadow shine! _(Your name could be here—come join us!)_
+Huge thanks to our awesome contributors for helping Parabl 4Shadow shine! _(Your name could be here—come join us!)_
 
 ## About Similie
 

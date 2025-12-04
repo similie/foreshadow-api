@@ -11,6 +11,7 @@ Key Changes:
 - We remove partial-coverage pruning logic for the current day;
   the 06/12/18 folders are always just 24 hours.
 """
+
 import argparse
 import boto3
 import os
@@ -18,7 +19,10 @@ import re
 import shutil
 from datetime import datetime, timedelta, UTC
 from dotenv import load_dotenv, find_dotenv
-env_file = find_dotenv()                     # returns path or ''
+from botocore import UNSIGNED
+from botocore.client import Config
+
+env_file = find_dotenv()  # returns path or ''
 print("Loading .env from:", env_file)
 load_dotenv(env_file, verbose=True)
 # ---------------------------------------------------------------------------
@@ -34,19 +38,20 @@ FILE_NAME_PATTERNS = [
     # add more patterns as needed
 ]
 
-#LOCAL_BASE_PATH = "/Volumes/ModelBackup/HyphenForecaster/gfs_slim"
+# LOCAL_BASE_PATH = "/Volumes/ModelBackup/HyphenForecaster/gfs_slim"
 LOCAL_BASE_PATH = os.getenv("GRIB_FILES_PATH", "~/Sites/hyphen-forecaster/grib")
 MAX_DAYS = 5
 STATE_FILE = os.path.join(LOCAL_BASE_PATH, "downloaded_index.json")
 # These will be used *per hour* depending on whether it's 00 or not:
 #  - 00 => 0..384
 #  - 06,12,18 => 0..23
-FULL_RANGE = list(range(0, 385))   # up to f384
-SHORT_RANGE = list(range(0, 24))   # up to f023
-STEP_RANGE = list(range(123, 387, 3))   # up to f023
+FULL_RANGE = list(range(0, 385))  # up to f384
+SHORT_RANGE = list(range(0, 24))  # up to f023
+STEP_RANGE = list(range(123, 387, 3))  # up to f023
 # Boto3 S3 client
-s3 = boto3.client("s3")
+s3 = boto3.client("s3", config=Config(signature_version=UNSIGNED))
 # Load at startup (if it exists)…
+
 
 # # …after fetch_sparse_data, dump it back out:
 # pulled_new_data = fetch_sparse_data(downloaded_files_map, today_str)
@@ -60,6 +65,7 @@ def listFileHour(value: int) -> str:
     """Convert integer hour into zero-padded string: 6 -> '006'."""
     return f"{value:03d}"
 
+
 def list_s3_files(bucket: str, prefix: str):
     """
     Recursively list all S3 keys under a prefix.
@@ -72,12 +78,14 @@ def list_s3_files(bucket: str, prefix: str):
             files.extend([obj["Key"] for obj in page["Contents"]])
     return files
 
+
 def download_s3_file(bucket: str, key: str, destination: str):
     """
     Download a single file from S3 to 'destination'.
     """
     os.makedirs(os.path.dirname(destination), exist_ok=True)
     s3.download_file(bucket, key, destination)
+
 
 def find_local_fvalues(folder_path: str):
     """
@@ -108,7 +116,7 @@ def download_sparse_files(
     date_str: str,
     hour_str: str,
     required_hours: list[int],
-    downloaded_map: dict
+    downloaded_map: dict,
 ) -> bool:
     """
     1) Recursively list all S3 keys under 'prefix'.
@@ -175,6 +183,7 @@ def download_sparse_files(
 
     return downloaded_any
 
+
 def fetch_sparse_data(downloaded_map: dict, today_str: str) -> bool:
     """
     - For hour=00, fetch the full range (f000..f384).
@@ -196,10 +205,13 @@ def fetch_sparse_data(downloaded_map: dict, today_str: str) -> bool:
         print(f"Fetching data for {prefix}")
         local_dir = os.path.join(LOCAL_BASE_PATH, today_str, hour)
         print(f"local dir: {local_dir}")
-        if download_sparse_files(local_dir, prefix, today_str, hour, required_hours, downloaded_map):
+        if download_sparse_files(
+            local_dir, prefix, today_str, hour, required_hours, downloaded_map
+        ):
             new_data_found = True
 
     return new_data_found
+
 
 # ---------------------------------------------------------------------------
 # COVERAGE CHECK
@@ -231,6 +243,7 @@ def is_00_coverage_complete(downloaded_map: dict, date_str: str) -> bool:
     # print(f"Checking coverage for {date_str} hour=00: {sorted(fvals)} vs. {sorted(needed)}")
     # return needed.issubset(fvals)
 
+
 # ---------------------------------------------------------------------------
 # CLEANUP LOGIC
 # ---------------------------------------------------------------------------
@@ -253,6 +266,7 @@ def prune_files_to_24h(hour_folder: str):
             if fhr > 23:
                 print(f"Removing {full_path} because forecast hour f{fhr:03d} > 023")
                 os.remove(full_path)
+
 
 def cleanup_old_data(latest_date_str: str):
     """
@@ -302,25 +316,24 @@ def cleanup_old_data(latest_date_str: str):
             # Current day: do nothing. We no longer do partial coverage cleanup here.
             print(f"Skipping cleanup for current day: {date_path}")
 
+
 # ---------------------------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     print("Starting NOAA GFS data download (flattened) with revised logic...")
     # Dictionary to track coverage for newly downloaded runs
-    parser = argparse.ArgumentParser(description='Download NOAA GFS data.')
+    parser = argparse.ArgumentParser(description="Download NOAA GFS data.")
 
     # Add optional arguments
     parser.add_argument(
-        '--date-offset',
+        "--date-offset",
         type=int,
         default=0,
-        help='Number of days offset from today (default: 0)'
+        help="Number of days offset from today (default: 0)",
     )
     parser.add_argument(
-        '--no-cleanup',
-        action='store_true',
-        help='Skip cleanup of old data'
+        "--no-cleanup", action="store_true", help="Skip cleanup of old data"
     )
 
     # Parse the arguments

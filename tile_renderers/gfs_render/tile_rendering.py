@@ -4,9 +4,12 @@ import numpy as np
 from PIL import Image
 from .model_service import ModelService
 from .map_colors import MapColors
+
 # from .time_logger import TimeLogger
 from .system_config import SystemConfig
+
 logger = logging.getLogger(__name__)
+
 
 class TileRendering:
     def __init__(self, model_service: ModelService) -> None:
@@ -22,9 +25,9 @@ class TileRendering:
         z: int,
         x: int,
         y: int,
-        level: int|None = None,
-        type_of_level: str|None = None,
-        step_type: str|None = None
+        level: int | None = None,
+        type_of_level: str | None = None,
+        step_type: str | None = None,
     ) -> bytes | None:
         # timer = TimeLogger()
         # timer.log("Start render_tile")
@@ -35,7 +38,7 @@ class TileRendering:
             model, param_key, hour_offset, level, type_of_level, step_type
         )
         ip = self.model_service.get_or_build_interpolator(
-             model, param_key, hour_offset, level, type_of_level, step_type
+            model, param_key, hour_offset, level, type_of_level, step_type
         )
         # timer.log("I have the IP")
         if not ip:
@@ -46,7 +49,9 @@ class TileRendering:
         gmax = float(getattr(ip, "gmax", 1.0))
         missing_val = float(getattr(ip, "missing_val", 9999.0))
         try:
-            grid_z = self.model_service.get_or_build_tile_grid(ip, pts, iterp_key, oversize)
+            grid_z = self.model_service.get_or_build_tile_grid(
+                ip, pts, iterp_key, oversize
+            )
             # timer.log("Built GridZ")
             if grid_z is None:
                 logger.warning("No interpolator found => returning None.")
@@ -64,7 +69,7 @@ class TileRendering:
                 data_2d=grid_z,
                 gmin=gmin,
                 gmax=gmax,
-                missing_mask=np.isnan(grid_z)
+                missing_mask=np.isnan(grid_z),
             )
             # timer.log("RGB Done")
             # 4) Crop => (256,256)
@@ -79,10 +84,10 @@ class TileRendering:
             return None
 
     def _blank_tile(self) -> bytes:
-        arr = np.zeros((256,256,4), dtype=np.uint8)
+        arr = np.zeros((256, 256, 4), dtype=np.uint8)
         buf = io.BytesIO()
         Image.fromarray(arr, "RGBA").save(buf, format="PNG")
         return buf.getvalue()
 
-    def valid_zxy(self, z:int, x:int, y:int):
-        return not(z < 0 or not (0 <= x < 2**z and 0 <= y < 2**z))
+    def valid_zxy(self, z: int, x: int, y: int):
+        return not (z < 0 or not (0 <= x < 2**z and 0 <= y < 2**z))
