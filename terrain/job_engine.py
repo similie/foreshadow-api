@@ -232,6 +232,7 @@ class HydrologyJobEngine:
             power=2.0,
             min_dist_cells=1.0,
             rain_radius_km=rain_radius_km,
+            use_wind=True,  # NEW
         ).astype("float32")
 
         # Guarantee no negative values (rare interpolation artifact)
