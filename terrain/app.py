@@ -1,6 +1,8 @@
 # terrain/app.py
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 from terrain.api import hydrology
 
 app = FastAPI(
@@ -11,6 +13,14 @@ app = FastAPI(
 
 # Include your hydrology router
 app.include_router(hydrology.router)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or your specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/")
