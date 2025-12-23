@@ -21,7 +21,7 @@ from terrain.colorizers import (
     colorize_fsi_rgba,
     colorize_lsi_base_rgba,
     colorize_lsi_hazard_rgba,
-    # colorize_lsi_trigger_rgba,
+    colorize_lsi_trigger_rgba,
     colorize_rain_rgba,
     colorize_slope_rgba,
     colorize_twi_rgba,
@@ -187,18 +187,79 @@ def render_layer_rgba(ctx: RenderContext, layer: str) -> np.ndarray:
     # ----------------------------------------------------------
     if layer == "lsi_trigger":
         # Make trigger pop: alpha scaled, and boost midrange *display-only*
-        h = np.clip(data.astype("float32"), 0.0, 1.0)
-        h = np.power(h, 0.65)  # stronger pop than hazard; tweak 0.6..0.8
-        return colorize_lsi_hazard_rgba(h, nodata, alpha_min=0, alpha_max=240)
+        # h = np.clip(data.astype("float32"), 0.0, 1.0)
+        # h = np.power(h, 0.65)  # stronger pop than hazard; tweak 0.6..0.8
+        # return colorize_lsi_hazard_rgba(h, nodata, alpha_min=0, alpha_max=240)
+        # return colorize_lsi_trigger_rgba(data, nodata, alpha_min=0, alpha_max=255)
+        # d = data.astype("float32")
+        # vmax = np.nanmax(d) if np.any(np.isfinite(d)) else 0.0
 
+        # if vmax > 1.5:  # mm/hr stored
+        #     return colorize_lsi_hazard_rgba(
+        #         d,
+        #         nodata,
+        #         mode="mmhr",
+        #         t0=2.0,
+        #         t1=5.0,
+        #         t2=10.0,
+        #         t3=25.0,
+        #         gamma=0.75,
+        #         alpha_min=90,
+        #         alpha_max=255,
+        #     )
+        # else:  # old trigger index stored
+        #     h = np.clip(d, 0.0, 1.0)
+        #     h = np.power(h, 0.55)
+        #     return colorize_lsi_hazard_rgba(
+        #         h,
+        #         nodata,
+        #         mode="index",
+        #         show_from=0.01,
+        #         gamma=0.45,
+        #         alpha_min=120,
+        #         alpha_max=255,
+        #     )
+        return colorize_lsi_hazard_rgba(
+            data,
+            nodata,
+            mode="mmhr",
+            t0=0.5,
+            t3=12.0,  # MUST match compute_lsi_trigger thresholds
+            gamma=0.55,  # make the forcing pop
+            show_from=0.25,  # hide tiny drizzle noise
+            alpha_min=90,
+            alpha_max=255,
+        )
     # ----------------------------------------------------------
     # LSI Hazard
     # ----------------------------------------------------------
     if layer == "lsi_hazard":
+        # h = np.clip(data.astype("float32"), 0.0, 1.0)
+        # h = np.power(h, 0.7)  # boost midrange for visibility (display-only)
+        # return colorize_lsi_hazard_rgba(h, nodata, alpha_min=0, alpha_max=255)
+        # h = np.clip(data.astype("float32"), 0.0, 1.0)
+        # h = np.power(h, 0.7)  # display-only boost
+        # return colorize_lsi_hazard_rgba(
+        #     h,
+        #     nodata,
+        #     mode="index",
+        #     show_from=0.02,
+        #     gamma=0.6,
+        #     alpha_min=90,
+        #     alpha_max=255,
+        # )
         h = np.clip(data.astype("float32"), 0.0, 1.0)
-        h = np.power(h, 0.7)  # boost midrange for visibility (display-only)
-        return colorize_lsi_hazard_rgba(h, nodata, alpha_min=0, alpha_max=255)
-
+        # Boost mid/low hazard so features show up (your “red ridges” come back)
+        h = np.power(h, 0.45)
+        return colorize_lsi_hazard_rgba(
+            h,
+            nodata,
+            mode="index",
+            gamma=0.70,
+            show_from=0.02,  # suppress near-zero haze
+            alpha_min=80,
+            alpha_max=255,
+        )
     # ----------------------------------------------------------
     # Rain
     # ----------------------------------------------------------

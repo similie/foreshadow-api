@@ -237,52 +237,135 @@ def compute_lsi_trigger(
     rain_mm: np.ndarray,
     dem: np.ndarray,
     event_duration_hours: float,
-    twi: np.ndarray | None = None,
-    dist_to_channel_m: np.ndarray | None = None,
     dem_nodata: float | None = None,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Returns:
+      intensity_mmhr: mm/hr (FOR RENDERING)
+      trigger_01:     0..1  (FOR HAZARD MATH)
+    """
     land = _land_mask_from_dem(dem, dem_nodata)
 
     dur_h = max(float(event_duration_hours), 1e-6)
-    intensity = rain_mm.astype("float32") / dur_h  # mm/hr
+    intensity_mmhr = (rain_mm.astype("float32") / dur_h).astype("float32")
+    intensity_mmhr[~land] = np.nan
 
-    # Only consider where rain exists (prevents normalization collapsing to zeros)
-    rain_mask = land & np.isfinite(intensity) & (intensity > 0)
+    # Map mm/hr -> 0..1 for hazard math.
+    # IMPORTANT: These thresholds must match your operational reality.
+    # If you routinely see long-duration events, keep t0 low so "big totals" still register.
+    t0 = 0.5  # starts to matter
+    t3 = 12.0  # very heavy / extreme in Timor context (tune: 10..25)
 
-    # 1) Rain intensity forcing (relative 0..1 inside rainy footprint)
-    I = _robust_norm_01(intensity, rain_mask, 5, 95)
+    trigger_01 = (np.clip(intensity_mmhr, t0, t3) - t0) / max(1e-6, (t3 - t0))
+    trigger_01 = np.clip(trigger_01, 0.0, 1.0).astype("float32")
 
-    # 2) Duration / saturation factor (longer events push trigger up)
-    # 0..1 where ~0 at 0h and ~1 around 12h (tune)
-    D = np.clip(np.log1p(dur_h) / np.log1p(12.0), 0.0, 1.0).astype("float32")
+    # mild shaping so moderate-heavy shows up more
+    trigger_01 = np.power(trigger_01, 0.85).astype("float32")
 
-    # 3) Convergence/wetness predisposition (optional but recommended)
-    if twi is not None:
-        twi_mask = land & np.isfinite(twi)
-        T = _robust_norm_01(twi.astype("float32"), twi_mask, 5, 95)
-    else:
-        T = np.zeros_like(I, dtype="float32")
+    return intensity_mmhr, trigger_01
 
-    # 4) Near-channel boost (optional: makes “flood-like activation” visible)
-    if dist_to_channel_m is not None:
-        d = dist_to_channel_m.astype("float32")
-        dmask = land & np.isfinite(d) & (d >= 0)
-        # Map 0m->1, 2000m->0 (tune)
-        near = np.zeros_like(I, dtype="float32")
-        near[dmask] = np.clip(1.0 - (d[dmask] / 2000.0), 0.0, 1.0)
-    else:
-        near = np.zeros_like(I, dtype="float32")
 
-    # Blend: rain dominates, but TWI + near-channel decide where it “activates”
-    trigger = (0.70 * I + 0.20 * T + 0.10 * near).astype("float32")
+# def compute_lsi_trigger(
+#     *,
+#     rain_mm: np.ndarray,
+#     dem: np.ndarray,
+#     event_duration_hours: float,
+#     dem_nodata: float | None = None,
+# ) -> np.ndarray:
+#     land = _land_mask_from_dem(dem, dem_nodata)
 
-    # Apply duration as a global multiplier (keeps spatial pattern from above)
-    trigger *= 0.60 + 0.40 * D  # never goes to zero if raining
+#     dur_h = max(float(event_duration_hours), 1e-6)
+#     intensity_mmhr = (rain_mm.astype("float32") / dur_h).astype("float32")
 
-    # Make sure non-rain stays transparent
-    trigger[~rain_mask] = 0.0
-    trigger[~land] = np.nan
-    return np.clip(trigger, 0.0, 1.0)
+#     # keep only land; ocean/void -> NaN
+#     intensity_mmhr[~land] = np.nan
+
+#     # (optional) also remove non-positive rain
+#     intensity_mmhr[intensity_mmhr <= 0] = np.nan
+
+#     return intensity_mmhr
+
+
+def compute_lsi_hazard(*, lsi_base: np.ndarray, lsi_trigger: np.ndarray) -> np.ndarray:
+    # lsi_base assumed 0..1 (or close)
+    base = lsi_base.astype("float32", copy=False)
+    trig = lsi_trigger.astype("float32", copy=False)
+
+    mask = np.isfinite(base) & np.isfinite(trig) & (trig > 0)
+
+    if not np.any(mask):
+        out = np.full_like(base, np.nan, dtype="float32")
+        return out
+
+    # robust normalize trigger intensity (mm/hr) to 0..1
+    v = trig[mask]
+    p5 = float(np.percentile(v, 5))
+    p95 = float(np.percentile(v, 95))
+    if p95 <= p5:
+        p95 = p5 + 1e-6
+
+    t = np.clip((trig - p5) / (p95 - p5), 0.0, 1.0)
+
+    # shape it so mid/high rain pops more
+    gamma = 0.75  # <1 boosts midrange
+    t = np.power(t, gamma).astype("float32")
+
+    hazard = base * t
+    hazard[~np.isfinite(hazard)] = np.nan
+    return hazard.astype("float32")
+
+
+# def compute_lsi_trigger(
+#     *,
+#     rain_mm: np.ndarray,
+#     dem: np.ndarray,
+#     event_duration_hours: float,
+#     twi: np.ndarray | None = None,
+#     dist_to_channel_m: np.ndarray | None = None,
+#     dem_nodata: float | None = None,
+# ) -> np.ndarray:
+#     land = _land_mask_from_dem(dem, dem_nodata)
+
+#     dur_h = max(float(event_duration_hours), 1e-6)
+#     intensity = rain_mm.astype("float32") / dur_h  # mm/hr
+
+#     # Only consider where rain exists (prevents normalization collapsing to zeros)
+#     rain_mask = land & np.isfinite(intensity) & (intensity > 0)
+
+#     # 1) Rain intensity forcing (relative 0..1 inside rainy footprint)
+#     I = _robust_norm_01(intensity, rain_mask, 5, 95)
+
+#     # 2) Duration / saturation factor (longer events push trigger up)
+#     # 0..1 where ~0 at 0h and ~1 around 12h (tune)
+#     D = np.clip(np.log1p(dur_h) / np.log1p(12.0), 0.0, 1.0).astype("float32")
+
+#     # 3) Convergence/wetness predisposition (optional but recommended)
+#     if twi is not None:
+#         twi_mask = land & np.isfinite(twi)
+#         T = _robust_norm_01(twi.astype("float32"), twi_mask, 5, 95)
+#     else:
+#         T = np.zeros_like(I, dtype="float32")
+
+#     # 4) Near-channel boost (optional: makes “flood-like activation” visible)
+#     if dist_to_channel_m is not None:
+#         d = dist_to_channel_m.astype("float32")
+#         dmask = land & np.isfinite(d) & (d >= 0)
+#         # Map 0m->1, 2000m->0 (tune)
+#         near = np.zeros_like(I, dtype="float32")
+#         near[dmask] = np.clip(1.0 - (d[dmask] / 2000.0), 0.0, 1.0)
+#     else:
+#         near = np.zeros_like(I, dtype="float32")
+
+#     # Blend: rain dominates, but TWI + near-channel decide where it “activates”
+#     trigger = (0.70 * I + 0.20 * T + 0.10 * near).astype("float32")
+
+#     # Apply duration as a global multiplier (keeps spatial pattern from above)
+#     trigger *= 0.60 + 0.40 * D  # never goes to zero if raining
+
+#     # Make sure non-rain stays transparent
+#     trigger[~rain_mask] = 0.0
+#     trigger[~land] = np.nan
+#     return np.clip(trigger, 0.0, 1.0)
 
 
 # def compute_lsi_trigger(
@@ -320,15 +403,15 @@ def compute_lsi_trigger(
 #     return trigger
 
 
-def compute_lsi_hazard(
-    *,
-    lsi_base: np.ndarray,
-    lsi_trigger: np.ndarray,
-) -> np.ndarray:
-    """
-    Combined hazard: predisposition × trigger.
-    """
-    hazard = (lsi_base.astype("float32") * lsi_trigger.astype("float32")).astype(
-        "float32"
-    )
-    return np.clip(hazard, 0.0, 1.0)
+# def compute_lsi_hazard(
+#     *,
+#     lsi_base: np.ndarray,
+#     lsi_trigger: np.ndarray,
+# ) -> np.ndarray:
+#     """
+#     Combined hazard: predisposition × trigger.
+#     """
+#     hazard = (lsi_base.astype("float32") * lsi_trigger.astype("float32")).astype(
+#         "float32"
+#     )
+#     return np.clip(hazard, 0.0, 1.0)

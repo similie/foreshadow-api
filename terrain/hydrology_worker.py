@@ -237,12 +237,12 @@ def process_job(
 
         _save_geotiff_4326(lsi_base_path, lsi_base, dem_transform, nodata=np.nan)
 
-    lsi_trigger = compute_lsi_trigger(
+    lsi_intensity_mmhr, lsi_trigger = compute_lsi_trigger(
         rain_mm=rain_mm,
         dem=dem,
         event_duration_hours=event_duration_hours,
-        dem_nodata=dem_nodata,
-    ).astype("float32")
+        dem_nodata=None,
+    )
 
     lsi_hazard = compute_lsi_hazard(lsi_base=lsi_base, lsi_trigger=lsi_trigger).astype(
         "float32"
@@ -250,8 +250,34 @@ def process_job(
 
     lsi_trigger_path = job_dir / "lsi_trigger.tif"
     lsi_hazard_path = job_dir / "lsi_hazard.tif"
-    _save_geotiff_4326(lsi_trigger_path, lsi_trigger, dem_transform, nodata=np.nan)
+
+    # Visual layer = mm/hr
+    _save_geotiff_4326(
+        lsi_trigger_path,
+        lsi_intensity_mmhr.astype("float32"),
+        dem_transform,
+        nodata=np.nan,
+    )
+    # Hazard layer = 0..1
     _save_geotiff_4326(lsi_hazard_path, lsi_hazard, dem_transform, nodata=np.nan)
+    # lsi_intensity_mmhr, lsi_trigger = compute_lsi_trigger(
+    #     rain_mm=rain_mm,
+    #     dem=dem,
+    #     event_duration_hours=event_duration_hours,
+    #     dem_nodata=dem_nodata,
+    # )
+
+    # lsi_hazard = compute_lsi_hazard(lsi_base=lsi_base, lsi_trigger=lsi_trigger).astype(
+    #     "float32"
+    # )
+
+    # lsi_trigger_path = job_dir / "lsi_trigger.tif"
+    # lsi_hazard_path = job_dir / "lsi_hazard.tif"
+    # _save_geotiff_4326(lsi_trigger_path, lsi_trigger, dem_transform, nodata=np.nan)
+    # _save_geotiff_4326(
+    #     lsi_trigger_path, lsi_intensity_mmhr, dem_transform, nodata=np.nan
+    # )
+    # _save_geotiff_4326(lsi_hazard_path, lsi_hazard, dem_transform, nodata=np.nan)
 
     params["has_landslide"] = True
 
