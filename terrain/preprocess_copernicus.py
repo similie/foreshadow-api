@@ -375,46 +375,46 @@ def run_preprocess_copernicus(
         raise ValueError("No tiles downloaded.")
 
     # 2) Find all .tif under download_dir (some folders may contain multiple COGs)
-    # tif_paths = _find_dem_tifs(cfg.download_dir)
-    # print(f"\n🧩 Found {len(tif_paths)} GeoTIFF(s) under {cfg.download_dir}")
-    # print("Skip reasons:", dict(reasons))
-    # # 3) Mosaic into DEM
-    # print("\n🧩 Mosaicing tiles → DEM ...")
-    # dem, transform, crs = _mosaic_geotiffs_to_dem(tif_paths, bbox=cfg.bbox)
-    # print(f"  DEM shape: {dem.shape}")
-    # print(f"  DEM CRS:   {crs}")
-    # print(f"  DEM transform: {transform}")
+    tif_paths = _find_dem_tifs(cfg.download_dir)
+    print(f"\n🧩 Found {len(tif_paths)} GeoTIFF(s) under {cfg.download_dir}")
+    print("Skip reasons:", dict(reasons))
+    # 3) Mosaic into DEM
+    print("\n🧩 Mosaicing tiles → DEM ...")
+    dem, transform, crs = _mosaic_geotiffs_to_dem(tif_paths, bbox=cfg.bbox)
+    print(f"  DEM shape: {dem.shape}")
+    print(f"  DEM CRS:   {crs}")
+    print(f"  DEM transform: {transform}")
 
-    # # 4) Save DEM
-    # dem_path = cfg.output_dir / "dem.tif"
-    # print("\n💾 Saving DEM (EPSG:4326) ...")
-    # _save_geotiff(dem_path, dem, transform, crs, nodata=-9999.0, dtype="float32")
-    # print(f"  ✔ Saved → {dem_path}")
-    # 2) Build global DEM VRT (tiny index; no mosaic in RAM)
-    vrt_path = cfg.output_dir / "dem.vrt"
-    print("\n🧩 Building DEM VRT (no mosaic in RAM) ...")
-    build_dem_vrt(tiles_root=cfg.download_dir, vrt_path=vrt_path)
-    print(f"  ✔ Saved → {vrt_path}")
-
-    # 3) Cut a regional DEM from the VRT (bounded memory)
-    # IMPORTANT: If cfg.bbox is None, do NOT try to cut global DEM — that defeats the purpose.
-    if cfg.bbox is None:
-        raise ValueError(
-            "bbox is required for regional preprocessing. "
-            "Do not cut a global DEM; instead, provide a bbox (min_lon,min_lat,max_lon,max_lat)."
-        )
-
-    print("\n✂️  Cutting regional DEM from VRT ...")
-    dem_path = cut_dem_from_vrt(
-        RegionalCutoutConfig(
-            dem_vrt_path=vrt_path,
-            out_dir=cfg.output_dir,
-            bbox=cfg.bbox,
-            target_res_deg=None,  # keep finest available
-            nodata_out=-9999.0,
-        )
-    )
+    # 4) Save DEM
+    dem_path = cfg.output_dir / "dem.tif"
+    print("\n💾 Saving DEM (EPSG:4326) ...")
+    _save_geotiff(dem_path, dem, transform, crs, nodata=-9999.0, dtype="float32")
     print(f"  ✔ Saved → {dem_path}")
+    # 2) Build global DEM VRT (tiny index; no mosaic in RAM)
+    # vrt_path = cfg.output_dir / "dem.vrt"
+    # print("\n🧩 Building DEM VRT (no mosaic in RAM) ...")
+    # build_dem_vrt(tiles_root=cfg.download_dir, vrt_path=vrt_path)
+    # print(f"  ✔ Saved → {vrt_path}")
+
+    # # 3) Cut a regional DEM from the VRT (bounded memory)
+    # # IMPORTANT: If cfg.bbox is None, do NOT try to cut global DEM — that defeats the purpose.
+    # if cfg.bbox is None:
+    #     raise ValueError(
+    #         "bbox is required for regional preprocessing. "
+    #         "Do not cut a global DEM; instead, provide a bbox (min_lon,min_lat,max_lon,max_lat)."
+    #     )
+
+    # print("\n✂️  Cutting regional DEM from VRT ...")
+    # dem_path = cut_dem_from_vrt(
+    #     RegionalCutoutConfig(
+    #         dem_vrt_path=vrt_path,
+    #         out_dir=cfg.output_dir,
+    #         bbox=cfg.bbox,
+    #         target_res_deg=None,  # keep finest available
+    #         nodata_out=-9999.0,
+    #     )
+    # )
+    # print(f"  ✔ Saved → {dem_path}")
 
     # Load DEM back for D8 (your d8_flow expects an ndarray)
     with rasterio.open(dem_path) as dem_src:
