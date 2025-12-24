@@ -66,7 +66,7 @@ class CopernicusDEMS3Downloader:
 
         folders = list(self._folders_for_bbox(bbox))
         downloaded: List[Path] = []
-
+        count = 0
         for folder in folders:
             keys = self._list_keys(prefix=f"{folder}/")
             tif_keys = [k for k in keys if k.lower().endswith(".tif")]
@@ -76,15 +76,18 @@ class CopernicusDEMS3Downloader:
                 continue
 
             for key in tif_keys:
+                count += 1
                 local_path = self.cfg.out_dir / key
                 if self._already_downloaded(local_path):
                     downloaded.append(local_path)
+                    print(f"File exists. Skipping {count} {local_path} ")
                     continue
 
                 tmp_path = local_path.with_suffix(local_path.suffix + ".part")
-                self._download_key(key, local_path)
+                self._download_key(key, tmp_path)
                 tmp_path.replace(local_path)
                 downloaded.append(local_path)
+                print(f"File downloaded {count} {local_path}")
 
         return downloaded
 
@@ -103,7 +106,9 @@ class CopernicusDEMS3Downloader:
                 key = obj["Key"]
                 if key.lower().endswith(".tif"):
                     local_path = self.cfg.out_dir / key
-                    self._download_key(key, local_path)
+                    tmp_path = local_path.with_suffix(local_path.suffix + ".part")
+                    self._download_key(key, tmp_path)
+                    tmp_path.replace(local_path)
                     downloaded.append(local_path)
         return downloaded
 
