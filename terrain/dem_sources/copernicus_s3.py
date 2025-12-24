@@ -12,15 +12,20 @@ from botocore.client import Config
 BBox = Tuple[float, float, float, float]  # (min_lon, min_lat, max_lon, max_lat)
 
 
+# terrain/dem_sources/copernicus_s3.py
+
+
 @dataclass(frozen=True)
 class CopernicusDEMConfig:
-    # Prefer 30m, fall back to 90m if you want global completeness.
-    dataset: str = "30m"  # "30m" or "90m"
+    dataset: str = "30m"
     out_dir: Path = Path("data/elevation_copernicus")
-
-    # Default: Timor-Leste + buffer
-    # Rough TL bbox ≈ lon 123.7–127.3, lat -10.6–-8.1; add buffer.
     default_bbox: BBox = (123.0, -11.4, 128.2, -7.4)
+
+    # NEW: what to download
+    download_dem: bool = True
+    download_wbm: bool = True  # water mask (useful)
+    download_qa: bool = False  # EDM/FLM/HEM (optional)
+    skip_preview: bool = True  # always skip PREVIEW unless explicitly needed
 
 
 class CopernicusDEMS3Downloader:
@@ -40,6 +45,33 @@ class CopernicusDEMS3Downloader:
 
         # unsigned, public access
         self.s3 = boto3.client("s3", config=Config(signature_version=UNSIGNED))
+
+    def _want_key(self, key: str) -> bool:
+        k = key.lower()
+        if not k.endswith(".tif"):
+            return False
+
+        # Always skip previews
+        if self.cfg.skip_preview and "/preview/" in k:
+            return False
+
+        # DEMs (main)
+        if self.cfg.download_dem and (k.endswith("_dem.tif") or k.endswith("/dem.tif")):
+            return True
+
+        # AUXFILES masks
+        if "/auxfiles/" in k:
+            if self.cfg.download_wbm and k.endswith("_wbm.tif"):
+                return True
+            if self.cfg.download_qa and (
+                k.endswith("_edm.tif")
+                or k.endswith("_flm.tif")
+                or k.endswith("_hem.tif")
+            ):
+                return True
+            return False
+
+        return False
 
     # ----------------------------
     # Public API
@@ -69,10 +101,10 @@ class CopernicusDEMS3Downloader:
         count = 0
         for folder in folders:
             keys = self._list_keys(prefix=f"{folder}/")
-            tif_keys = [k for k in keys if k.lower().endswith(".tif")]
+
+            tif_keys = [k for k in keys if self._want_key(k)]
 
             if not tif_keys:
-                # tile may be missing (ocean, or 30m-public coverage gap)
                 continue
 
             for key in tif_keys:
@@ -105,13 +137,17 @@ class CopernicusDEMS3Downloader:
         for page in paginator.paginate(Bucket=self.bucket):
             for obj in page.get("Contents", []):
                 key = obj["Key"]
+                if not self._want_key(key):
+                    continue
                 if key.lower().endswith(".tif"):
                     count += 1
                     local_path = self.cfg.out_dir / key
                     if self._already_downloaded(local_path):
                         downloaded.append(local_path)
-                        print(f"File exists. Skipping {count} {local_path} ")
+                        if count % 2500 == 0:
+                            print(f"Skipped existing {count} ...")
                         continue
+
                     tmp_path = local_path.with_suffix(local_path.suffix + ".part")
                     self._download_key(key, tmp_path)
                     tmp_path.replace(local_path)
