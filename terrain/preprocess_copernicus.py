@@ -22,8 +22,6 @@ from terrain.dem_sources.copernicus_s3 import (
     CopernicusDEMS3Downloader,
 )
 from terrain.flow_directions import FlowResult, d8_flow
-from terrain.process.copernicus_vrt import build_dem_vrt
-from terrain.process.regional_base import RegionalCutoutConfig, cut_dem_from_vrt
 
 reasons = Counter()
 BBox = Tuple[float, float, float, float]  # (min_lon, min_lat, max_lon, max_lat)
