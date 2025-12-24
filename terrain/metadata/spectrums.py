@@ -45,6 +45,7 @@ class LegendOut(TypedDict, total=False):
 @dataclass(frozen=True)
 class Spectrum:
     key: str
+    name: str
     colors: List[str]
     description: str
     legend: LegendOut
@@ -130,6 +131,7 @@ def _combined(
 # ----------------------------
 BASE_SPECTRA: List[Spectrum] = [
     Spectrum(
+        name="Digital Elevation Model",
         key="dem",
         description=(
             "Ground elevation above sea level from Copernicus DEM. "
@@ -149,6 +151,7 @@ BASE_SPECTRA: List[Spectrum] = [
         ),
     ),
     Spectrum(
+        name="Accumulation",
         key="accum",
         description=(
             "Flow accumulation (upstream contributing area proxy). "
@@ -166,6 +169,7 @@ BASE_SPECTRA: List[Spectrum] = [
         ),
     ),
     Spectrum(
+        name="Slope",
         key="slope",
         description=(
             "Terrain slope (degrees) derived from the DEM. "
@@ -184,6 +188,7 @@ BASE_SPECTRA: List[Spectrum] = [
         ),
     ),
     Spectrum(
+        name="Topographic Wetness Index",
         key="twi",
         description=(
             "Topographic Wetness Index (TWI): a terrain-based indicator of where water tends to "
@@ -206,6 +211,7 @@ BASE_SPECTRA: List[Spectrum] = [
         ),
     ),
     Spectrum(
+        name="Distance to Channel",
         key="dist_to_channel",
         description=(
             "Distance to the nearest drainage channel derived from flow accumulation. "
@@ -223,6 +229,7 @@ BASE_SPECTRA: List[Spectrum] = [
         ),
     ),
     Spectrum(
+        name="Landslide Susceptibility Index",
         key="lsi_base",
         description=(
             "Static landslide susceptibility derived from terrain properties (e.g., slope, wetness potential, "
@@ -241,6 +248,7 @@ BASE_SPECTRA: List[Spectrum] = [
 # ----------------------------
 JOB_SPECTRA: List[Spectrum] = [
     Spectrum(
+        name="Rainfall",
         key="rain",
         description=(
             "Interpolated rainfall depth for the event, based on station observations. "
@@ -250,6 +258,7 @@ JOB_SPECTRA: List[Spectrum] = [
         legend=_linear(spread=5, metric={"min": 0, "max": 200, "label": "mm"}),
     ),
     Spectrum(
+        name="Discharge",
         key="discharge",
         description=(
             "Estimated discharge (flow rate) during the event. Higher values indicate stronger channel flows."
@@ -264,6 +273,7 @@ JOB_SPECTRA: List[Spectrum] = [
         ),
     ),
     Spectrum(
+        name="Flood Severity Index",
         key="fsi",
         description=(
             "Flood Severity Index: relative flood hazard combining terrain, drainage, discharge, and rainfall."
@@ -272,6 +282,7 @@ JOB_SPECTRA: List[Spectrum] = [
         legend=_linear(spread=3, metric={"min": 0, "max": 1, "label": "index"}),
     ),
     Spectrum(
+        name="Landslide Tigger",
         key="lsi_trigger",
         description=(
             "Rainfall trigger field representing event-specific forcing for landslides. "
@@ -281,6 +292,7 @@ JOB_SPECTRA: List[Spectrum] = [
         legend=_linear(spread=3, metric={"min": 0, "max": 1, "label": "index"}),
     ),
     Spectrum(
+        name="Landslipe Hazards",
         key="lsi_hazard",
         description=(
             "Event landslide hazard combining base susceptibility and rainfall trigger. "
@@ -319,6 +331,8 @@ def spectrums_payload(
             "colors": s.colors,
             "description": s.description,
             "legend": s.legend,
+            "parameter_key": s.key,
+            "parameter_name": s.name,
         }
 
     return out
