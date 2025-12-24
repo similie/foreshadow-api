@@ -101,15 +101,22 @@ class CopernicusDEMS3Downloader:
         """
         downloaded: List[Path] = []
         paginator = self.s3.get_paginator("list_objects_v2")
+        count = 0
         for page in paginator.paginate(Bucket=self.bucket):
             for obj in page.get("Contents", []):
                 key = obj["Key"]
                 if key.lower().endswith(".tif"):
+                    count += 1
                     local_path = self.cfg.out_dir / key
+                    if self._already_downloaded(local_path):
+                        downloaded.append(local_path)
+                        print(f"File exists. Skipping {count} {local_path} ")
+                        continue
                     tmp_path = local_path.with_suffix(local_path.suffix + ".part")
                     self._download_key(key, tmp_path)
                     tmp_path.replace(local_path)
                     downloaded.append(local_path)
+                    print(f"File downloaded {count} {local_path}")
         return downloaded
 
     def _download_key(self, key: str, dst: Path) -> None:

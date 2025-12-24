@@ -14,8 +14,6 @@ from rasterio.io import DatasetReader
 from rasterio.merge import merge as rio_merge
 from rasterio.transform import Affine
 from rasterio.warp import calculate_default_transform, reproject, transform_bounds
-from terrain.preprocess.copernicus_vrt import build_dem_vrt
-from terrain.preprocess.regional_base import RegionalCutoutConfig, cut_dem_from_vrt
 
 # If you put the downloader class elsewhere, update this import.
 # (This matches the class I drafted previously.)
@@ -24,6 +22,8 @@ from terrain.dem_sources.copernicus_s3 import (
     CopernicusDEMS3Downloader,
 )
 from terrain.flow_directions import FlowResult, d8_flow
+from terrain.process.copernicus_vrt import build_dem_vrt
+from terrain.process.regional_base import RegionalCutoutConfig, cut_dem_from_vrt
 
 reasons = Counter()
 BBox = Tuple[float, float, float, float]  # (min_lon, min_lat, max_lon, max_lat)
